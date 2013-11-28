@@ -5,8 +5,8 @@ __A multithreaded frontend proxy with multiple servers, lobbies and load balanci
 
 ### Features
 
-* Multiple frontend threads.
-* One thread per server.
+* Multiple frontend receive workers.
+* One send worker per server.
 * Assign each server to a group to load balance between them, for example, multiple lobbies so you can always accept new players.
 * Seamless server-to-server transfer.
 * Proxy only needs a single config, an API key. Everything else is done by the servers.
@@ -29,3 +29,19 @@ GNU Lesser General Public License for more details.
 You should have received a copy of the GNU Lesser General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ```	
+
+
+### Description
+
+RubberBand is the work of a server plugin and a standalone proxy, enabling the creation of dynamic server networks.
+The proxy handles all the incoming packets, and decides where to send it depending on the current state of the player. 
+On server command, the proxy will cease connection with the server and open a new connection to the target server, sending all the current connection status so the player doesn't have to log out.
+
+Servers can be grouped, for example, you can have 8 lobby servers grouped into the _lobbyServers_ group. When a new player connects, instead of being redirected to the first lobby server, he will be sent to the least used one.
+
+The proxy configuration is given by the servers itself, so you can create new servers on the fly and they will be added to the RubberBand proxy. When removing them, they will be removed after 0-10 seconds from the proxy.
+
+You can also issue messages to be broadcasted to all servers, teleport players using commands, get info about other servers... And RubberBand comes with an API for plugins so you can extend its functionality.
+
+
+__Expected release date: 10th of December 2013__
