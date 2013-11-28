@@ -13,3 +13,6 @@ Desktop.ini
 
 # Mac crap
 .DS_Store
+
+# JetBrains PHPStorm Project Files
+/.idea/
