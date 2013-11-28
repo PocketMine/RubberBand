@@ -20,10 +20,22 @@
  *
 */
 
-class RubberBandWorker extends Worker{
+class RubberBandSendWorker extends Worker{
 
 	public function __construct(){
+		$this->start();
+	}
+
+	public function run(){	
+	}
 	
+}
+
+
+class RubberBandReceiveWorker extends Worker{
+
+	public function __construct(){
+		$this->start();	
 	}
 
 	public function run(){

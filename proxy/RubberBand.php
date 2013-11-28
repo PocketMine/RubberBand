@@ -21,12 +21,14 @@
 */
 
 define("RUBBERBAND_VERSION", "v1.0dev");
-define("DEBUG", 1);
+define("DEBUG", 2);
+define("LOG", true);
 
 require_once("src/utils/functions.php");
 require_once("src/utils/Utils.php");
 
 error_reporting(E_ALL);
+ini_set("display_errors", 1);
 
 $errors = 0;
 if(version_compare("5.4.0", PHP_VERSION) > 0){
@@ -69,7 +71,8 @@ require_once("src/utils/Config.php");
 require_once("src/utils/pthreads.php");
 require_once("src/network/UDPSocket.php");
 require_once("src/network/RubberBandFrontend.php");
-require_once("src/network/RubberBandWorker.php");
+require_once("src/network/RubberBandWorkers.php");
+require_once("src/network/RAWReceivedPacket.php");
 require_once("src/utils/RubberBandManager.php");
 
 require_once("src/RubberBandProxy.php");
@@ -78,7 +81,7 @@ require_once("src/RubberBandProxy.php");
 $config = new Config("config.yml", CONFIG_YAML, array(
 	"frontend-address" => "0.0.0.0",
 	"frontend-port" => 19132,
-	"frontend-threads" => 2,
+	"frontend-workers" => 2,
 	"api-key" => "YOUR_API_KEY",
 ));
 

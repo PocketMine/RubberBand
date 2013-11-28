@@ -21,22 +21,34 @@
 */
 
 class RubberBandManager extends Thread{
+	public static $instance = false;
 	private $stop;
 	private $address;
 	private $port;
 	private $threads;
 	private $apiKey;
-	private $socket;
-	private $frontendThreads;
+	private $frontendThread;
 	private $frontendWorkers;
 	public $data = array();
 	
 	public function __construct($address, $port, $threads, $apiKey){
 		$this->data = array($address, $port, $threads, $apiKey);
+		self::$instance = $this;
 	}
 	
 	private function getIdentifier($address, $port){
-		return crc32(sha1($address.":".$port."|".$this->apiKey, true));
+		return crc32(hash("sha1", $address.":".$port."|".$this->apiKey, true));
+	}
+	
+	public function addFrontendWorker(){
+		$k = count($this->frontendWorkers);
+		$this->frontendWorkers[$k] = new RubberBandReceiveWorker;
+		while(!$this->frontendWorkers[$k]->isStarted()){
+			usleep(1);
+		}
+		$this->frontendThread->addWorker($this->frontendWorkers[$k]);
+		console("[DEBUG] Added frontend Worker", true, true, 2);
+		return true;
 	}
 
 	public function run(){
@@ -45,21 +57,29 @@ class RubberBandManager extends Thread{
 		$this->port = $this->data[1];
 		$this->threads = $this->data[2];
 		$this->apiKey = $this->data[3];
+
+		$this->frontendThread = new RubberBandFrontend($this->address, $this->port);
+		while(!$this->frontendThread->isRunning()){
+			usleep(1);
+		}
 		
-		$this->socket = new UDPSocket($this->address, $this->port);
+		while(!$this->frontendThread->isWaiting() and !$this->frontendThread->isTerminated()){
+			usleep(1);
+		}
 		
-		if(!$this->socket->isConnected()){
+		if($this->frontendThread->isTerminated()){
 			return 1;
 		}
 
-		$this->frontendThreads = new StackableArray();
-
+		$this->frontendWorkers = new StackableArray();
 		for($k = 0; $k < $this->threads; ++$k){
-			$this->frontendThreads[] = new RubberBandFrontend($this->socket);
+			$this->addFrontendWorker();
 		}
 
-		while($this->stop === false){
+		$this->frontendThread->notify();
 
+		while($this->stop == false){
+			sleep(1);
 		}
 		return 0;
 	}

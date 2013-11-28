@@ -21,24 +21,57 @@
 */
 
 class RubberBandFrontend extends Thread{
-	public $socket;
+	public $address, $port;
+	private $socket;
+	private $stop;
 	private $workers;
-	public function __construct(UDPSocket $socket){
-		$this->socket = $socket;
+	private $workerCount;
+	public function __construct($address, $port){
+		$this->address = $address;
+		$this->port = $port;
 		$this->start();
 	}
 	
-	public function addWorker(RubberBandWorker $worker, $identifier){
-		$this->workers[$identifier] = $worker;
+	public function stop(){
+		$this->stop = true;
 	}
 	
-	public function removeWorker($identifier){
-		unset($this->workers[$identifier]);
+	public function addWorker(RubberBandReceiveWorker $worker){
+		$this->workers[$this->workerCount] = $worker;
+		++$this->workerCount;
 	}
 
 	public function run(){
+		$this->stop = false;
 		$this->workers = new StackableArray();
-	
+		
+		$this->socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+		if(socket_bind($this->socket, $this->address, $this->port) === true){
+			socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 0);
+			socket_set_option($this->socket, SOL_SOCKET, SO_SNDBUF, 65535);
+			socket_set_option($this->socket, SOL_SOCKET, SO_RCVBUF, 65535);
+			socket_set_block($this->socket);
+			console("[INFO] Started UDP frontend on {$this->address}:{$this->port}");
+		}else{
+			console("[ERROR] Couldn't start UDP socket on {$this->address}:{$this->port}");
+		}
+
+		$this->wait(); //Get ready for the action
+
+		$buf = null;
+		$source = null;
+		$port = null;
+		$count = 0;
+		while($this->stop == false){
+			if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
+				$this->workers[$count]->stack(new RAWReceivedPacket($buf, $source, $port));
+				++$count;
+				if($count >= $this->workerCount){
+					$count = 0;
+				}
+			}
+		}
+		return 0;
 	}
 	
 }

@@ -32,9 +32,9 @@ class RubberBandProxy{
 			console("[ERROR] API key not set. RubberBand won't work without setting it on the config.yml");
 			return;
 		}
-		$this->threads = $this->config->get("frontend-threads");
+		$this->threads = $this->config->get("frontend-workers");
 		if(!is_int($this->threads) or $this->threads < 1){
-			$this->config->set("frontend-threads", 1);
+			$this->config->set("frontend-workers", 1);
 			$this->threads = 1;
 		}
 		
@@ -51,7 +51,6 @@ class RubberBandProxy{
 		}
 		
 		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." for PocketMine-MP on ".$this->address.":".$this->port);
-		
 		$this->manager = new RubberBandManager($this->address, $this->port, $this->threads, $this->apiKey);
 		$this->manager->start();
 		while($this->manager->isTerminated()){

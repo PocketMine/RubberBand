@@ -20,10 +20,10 @@
  *
 */
 
-class UDPSocket{
+class UDPSocket extends Thread{
 	private $sock, $connected = false;
-	
-	public function __construct($address = "0.0.0.0", $port = 19132){
+
+	public function __construct($address = "0.0.0.0", $port = 19132, $reuse = false){
 		$this->sock = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
 		if(socket_bind($this->sock, $address, $port) === true){
 			socket_set_option($this->sock, SOL_SOCKET, SO_REUSEADDR, 0);
@@ -31,14 +31,28 @@ class UDPSocket{
 			socket_set_option($this->sock, SOL_SOCKET, SO_RCVBUF, 65535);
 			socket_set_nonblock($this->sock);
 			$this->connected = true;
+			$this->start();
+			while(!$this->isStarted()){
+				usleep(1);
+			}
+			console("[INFO] Started UDP socket on $address:$port");
 		}else{
 			$this->connected = false;
 			console("[ERROR] Couldn't start UDP socket on $address:$port");
 		}
 	}
+
+	public function run(){
+		while(true){
+			if($this->connected == false or !is_resource($this->sock)){
+				return 0;
+			}
+			sleep(1);
+		}
+	}
 	
 	public function isConnected(){
-		return $this->connected === true;
+		return $this->connected == true;
 	}
 	
 	public function close($error = 125){
@@ -47,7 +61,7 @@ class UDPSocket{
 	}
 	
 	public function read(&$buf, &$source, &$srcport){
-		if($this->connected === false){
+		if($this->connected == false){
 			return false;
 		}
 		return @socket_recvfrom($this->sock, $buf, 9216, 0, $source, $srcport);
