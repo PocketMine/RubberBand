@@ -33,14 +33,18 @@ class RubberBandSendWorker extends Worker{
 
 
 class RubberBandReceiveWorker extends Worker{
-
+	private $packets;
 	public function __construct(){
 		$this->start();	
 	}
+	
+	public function processPacket(RAWReceivedPacket $packet){
+		$this->packets[] = $packet;
+		$this->stack($packet);
+	}
 
 	public function run(){
-	
-	
+		$this->packets = new StackableArray();	
 	}
 	
 }

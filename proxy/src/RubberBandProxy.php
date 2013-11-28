@@ -50,7 +50,7 @@ class RubberBandProxy{
 			return;
 		}
 		
-		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." for PocketMine-MP on ".$this->address.":".$this->port);
+		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." on ".$this->address.":".$this->port);
 		$this->manager = new RubberBandManager($this->address, $this->port, $this->threads, $this->apiKey);
 		$this->manager->start();
 		while($this->manager->isTerminated()){

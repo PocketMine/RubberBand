@@ -62,9 +62,10 @@ class RubberBandFrontend extends Thread{
 		$source = null;
 		$port = null;
 		$count = 0;
+		$packets = array();
 		while($this->stop == false){
 			if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
-				$this->workers[$count]->stack(new RAWReceivedPacket($buf, $source, $port));
+				$this->workers[$count]->processPacket(new RAWReceivedPacket($buf, $source, $port));
 				++$count;
 				if($count >= $this->workerCount){
 					$count = 0;
