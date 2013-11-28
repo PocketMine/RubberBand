@@ -69,7 +69,6 @@ if($errors > 0){
 require_once("src/utils/Spyc.php");
 require_once("src/utils/Config.php");
 require_once("src/utils/pthreads.php");
-require_once("src/network/UDPSocket.php");
 require_once("src/network/RubberBandFrontend.php");
 require_once("src/network/RubberBandWorkers.php");
 require_once("src/network/RAWReceivedPacket.php");

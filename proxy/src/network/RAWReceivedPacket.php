@@ -22,7 +22,7 @@
 
 class RAWReceivedPacket extends Stackable{
 
-	public $buffer, $source, $port;
+	public $buffer, $source, $port, $referenceIndex;
 	public function __construct($buffer, $source, $port){
 		$this->buffer = $buffer;
 		$this->source = $source;
@@ -30,15 +30,11 @@ class RAWReceivedPacket extends Stackable{
 	}
 	
 	private function deleteReference(){
-		foreach($this->worker->packets as $index => $packet){
-			if($packet === $this){
-				unset($this->worker->packets[$index]);
-			}
-		}
+		unset($this->worker->packets[$this->referenceIndex]);
 	}
 	
 	public function run(){
-		echo $this->worker->getThreadId()." => {$this->source}:{$this->$port}: ".bin2hex($this->buffer).PHP_EOL;
+		echo $this->worker->getThreadId()." => {$this->source}:{$this->port}: ".bin2hex($this->buffer).PHP_EOL;
 		
 		$this->deleteReference();
 	}
