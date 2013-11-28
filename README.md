@@ -1,4 +1,4 @@
-# <img src="icon.png" style="width:64px;"/> RubberBand
+# ![](icon.png) RubberBand
 
 __A multithreaded frontend proxy with multiple servers, lobbies and load balancing. For PocketMine-MP__
 
