@@ -32,6 +32,10 @@ class StackableArray extends Stackable{
 		}
 	}
 	
+	public function __unset($key){
+		unset($this->{$key});
+	}
+	
 	public function __destruct(){}
 	
 	public function run(){}
