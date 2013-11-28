@@ -21,8 +21,41 @@
 */
 
 class RubberBandProxy{
-	
+	private $config, $address, $port, $apiKey, $threads = 1;
+	private $manager;
+
 	public function __construct(Config $config){
-	
+		$this->config = $config;
+		
+		$this->apiKey = $this->config->get("api-key");
+		if($this->apiKey == false or $this->apiKey == "YOUR_API_KEY"){
+			console("[ERROR] API key not set. RubberBand won't work without setting it on the config.yml");
+			return;
+		}
+		$this->threads = $this->config->get("frontend-threads");
+		if(!is_int($this->threads) or $this->threads < 1){
+			$this->config->set("frontend-threads", 1);
+			$this->threads = 1;
+		}
+		
+		$this->address = $this->config->get("frontend-address");
+		if($this->address === false){
+			console("[ERROR] Frontend Address not set. Set it on the config.yml");
+			return;
+		}
+		
+		$this->port = $this->config->get("frontend-port");
+		if($this->port === false){
+			console("[ERROR] Frontend Port not set. Set it on the config.yml");
+			return;
+		}
+		
+		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." for PocketMine-MP on ".$this->address.":".$this->port);
+		
+		$this->manager = new RubberBandManager($this->address, $this->port, $this->threads, $this->apiKey);
+		$this->manager->start();
+		while($this->manager->isTerminated()){
+			sleep(1);
+		}
 	}
 }
