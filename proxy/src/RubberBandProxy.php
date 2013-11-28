@@ -53,8 +53,15 @@ class RubberBandProxy{
 		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." on ".$this->address.":".$this->port);
 		$this->manager = new RubberBandManager($this->address, $this->port, $this->threads, $this->apiKey);
 		$this->manager->start();
-		while($this->manager->isTerminated()){
+		$nextCollector = time() + 20;
+		while(!$this->manager->isTerminated()){
 			sleep(1);
+			if(time() >= $nextCollector){
+				$nextCollector = time() + 20;
+				if(($cycles = gc_collect_cycles()) > 0){
+					console("[DEBUG] Collected ".$cycles." cycles", true, true, 2);
+				}
+			}
 		}
 	}
 }

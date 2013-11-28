@@ -29,13 +29,17 @@ class RAWReceivedPacket extends Stackable{
 		$this->port = $port;
 	}
 	
+	public function __destruct(){}
+	
 	private function deleteReference(){
+		$this->worker->packets[$this->referenceIndex] = null;
 		unset($this->worker->packets[$this->referenceIndex]);
+		$this->worker->unstack($this);
+		$this->__destruct();
 	}
 	
 	public function run(){
-		echo $this->worker->getThreadId()." => {$this->source}:{$this->port}: ".bin2hex($this->buffer).PHP_EOL;
-		
+		echo $this->worker->getThreadId()." => {$this->source}:{$this->port} %".strlen($this->buffer).PHP_EOL;		
 		$this->deleteReference();
 	}
 

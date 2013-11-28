@@ -36,7 +36,7 @@ class RubberBandFrontend extends Thread{
 		$this->stop = true;
 	}
 	
-	public function addWorker(RubberBandReceiveWorker $worker){
+	protected function addWorker(RubberBandReceiveWorker $worker){
 		$this->workers[$this->workerCount] = $worker;
 		++$this->workerCount;
 	}
@@ -65,7 +65,8 @@ class RubberBandFrontend extends Thread{
 		$packets = array();
 		while($this->stop == false){
 			if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
-				$this->workers[$count]->processPacket(new RAWReceivedPacket($buf, $source, $port));
+				$packet = new RAWReceivedPacket($buf, $source, $port);
+				$this->workers[$count]->processPacket($packet);
 				++$count;
 				if($count >= $this->workerCount){
 					$count = 0;

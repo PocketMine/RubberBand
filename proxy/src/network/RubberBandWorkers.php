@@ -25,6 +25,8 @@ class RubberBandSendWorker extends Worker{
 	public function __construct(){
 		$this->start();
 	}
+	
+	public function __destruct(){}
 
 	public function run(){	
 	}
@@ -38,10 +40,13 @@ class RubberBandReceiveWorker extends Worker{
 		$this->start();	
 	}
 	
-	public function processPacket(RAWReceivedPacket $packet){
+	public function __destruct(){}
+	
+	protected function processPacket(RAWReceivedPacket $packet){
 		$packet->referenceIndex = $this->packetIndex;
 		$this->packets[$this->packetIndex] = $packet;
 		$this->stack($packet);
+		unset($packet);
 		++$this->packetIndex;
 		if($this->packetIndex >= 0x7fffffff){
 			$this->packetIndex = 0;

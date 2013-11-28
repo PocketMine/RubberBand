@@ -40,7 +40,7 @@ class RubberBandManager extends Thread{
 		return crc32(hash("sha1", $address.":".$port."|".$this->apiKey, true));
 	}
 	
-	public function addFrontendWorker(){
+	protected function addFrontendWorker(){
 		$k = count($this->frontendWorkers);
 		$this->frontendWorkers[$k] = new RubberBandReceiveWorker;
 		while(!$this->frontendWorkers[$k]->isStarted()){

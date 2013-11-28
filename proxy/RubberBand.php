@@ -27,6 +27,7 @@ define("LOG", true);
 require_once("src/utils/functions.php");
 require_once("src/utils/Utils.php");
 
+gc_enable();
 error_reporting(E_ALL);
 ini_set("display_errors", 1);
 
