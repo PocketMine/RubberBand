@@ -5,10 +5,14 @@ __A multithreaded frontend proxy with multiple servers, lobbies and load balanci
 
 ### Features
 
-* Multiple frontend threads
-* One thread per server
-* Assign each server to a group to load balance between them
-* Seamless server-to-server transfer
+* Multiple frontend threads.
+* One thread per server.
+* Assign each server to a group to load balance between them, for example, multiple lobbies so you can always accept new players.
+* Seamless server-to-server transfer.
+* Proxy only needs a single config, an API key. Everything else is done by the servers.
+* Servers only need a plugin, no source changes. Also, it includes an API to extend its functionality.
+* Servers get autoregistered, so they can start accepting players directly.
+* Global / per server player list accesible.
 
 
 ```
