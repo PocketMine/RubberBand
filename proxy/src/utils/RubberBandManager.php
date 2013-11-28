@@ -30,8 +30,13 @@ class RubberBandManager extends Thread{
 	private $frontendThreads;
 	private $frontendWorkers;
 	public $data = array();
+	
 	public function __construct($address, $port, $threads, $apiKey){
 		$this->data = array($address, $port, $threads, $apiKey);
+	}
+	
+	private function getIdentifier($address, $port){
+		return crc32(sha1($address.":".$port."|".$this->apiKey, true));
 	}
 
 	public function run(){
@@ -46,11 +51,11 @@ class RubberBandManager extends Thread{
 		if(!$this->socket->isConnected()){
 			return 1;
 		}
-		
-		$this->frontendThreads = array();
+
+		$this->frontendThreads = new StackableArray();
 
 		for($k = 0; $k < $this->threads; ++$k){
-			
+			$this->frontendThreads[] = new RubberBandFrontend($this->socket);
 		}
 
 		while($this->stop === false){

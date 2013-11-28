@@ -26,7 +26,8 @@ define("DEBUG", 1);
 require_once("src/utils/functions.php");
 require_once("src/utils/Utils.php");
 
-set_error_handler("error_handler", E_ALL);
+error_reporting(E_ALL);
+
 $errors = 0;
 if(version_compare("5.4.0", PHP_VERSION) > 0){
 	console("[ERROR] Use PHP >= 5.4.0", true, true, 0);
@@ -65,6 +66,7 @@ if($errors > 0){
 
 require_once("src/utils/Spyc.php");
 require_once("src/utils/Config.php");
+require_once("src/utils/pthreads.php");
 require_once("src/network/UDPSocket.php");
 require_once("src/network/RubberBandFrontend.php");
 require_once("src/network/RubberBandWorker.php");

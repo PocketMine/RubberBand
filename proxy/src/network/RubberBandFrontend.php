@@ -21,13 +21,23 @@
 */
 
 class RubberBandFrontend extends Thread{
-
-	public function __construct(){
+	public $socket;
+	private $workers;
+	public function __construct(UDPSocket $socket){
+		$this->socket = $socket;
+		$this->start();
+	}
 	
+	public function addWorker(RubberBandWorker $worker, $identifier){
+		$this->workers[$identifier] = $worker;
+	}
+	
+	public function removeWorker($identifier){
+		unset($this->workers[$identifier]);
 	}
 
 	public function run(){
-	
+		$this->workers = new StackableArray();
 	
 	}
 	

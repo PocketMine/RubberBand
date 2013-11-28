@@ -1,4 +1,4 @@
-# ![](icon.png) RubberBand _for PocketMine-MP_
+# ![](icon.png) RubberBand _for [PocketMine-MP](https://github.com/PocketMine/PocketMine-MP)_
 
 __A multithreaded frontend proxy with multiple servers, lobbies and load balancing.__
 
