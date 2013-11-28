@@ -1,6 +1,6 @@
-# ![](icon.png) RubberBand
+# ![](icon.png) RubberBand _for PocketMine-MP_
 
-__A multithreaded frontend proxy with multiple servers, lobbies and load balancing. For PocketMine-MP__
+__A multithreaded frontend proxy with multiple servers, lobbies and load balancing.__
 
 
 ### Features
