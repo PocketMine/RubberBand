@@ -33,17 +33,209 @@ apiversion=10,11
 */
 		
 class RubberBand implements Plugin{
-	private $server;
+	const VERSION = "1.0dev";
+	const DEFAULT_CONTROL_PACKET_TIME = 10;
+
+	private $server, $RC4, $apiKey, $address, $port, $lastConnection = 0, $connected = false;
 	public function __construct(ServerAPI $api, $server = false){
 		$this->server = ServerAPI::request();
 		RubberBandAPI::setInstance($this);
 	}
 	
+	public function generateControlPacket($payload, $validUntil = false){
+		$validUntil = $validUntil === false ? time() + self::DEFAULT_CONTROL_PACKET_TIME:(int) $validUntil;
+		$payload = Utils::writeInt($validUntil) . $payload;
+		$md5sum = md5($payload . $this->apiKey, true);
+		return $this->RC4->encrypt($md5sum . $payload);
+	}
+	
+	public function sendNodeIdentifyPacket(){
+		$payload = "";
+		$payload .= chr(strlen(self::VERSION)).self::VERSION;
+		$payload .= Utils::writeShort(strlen($this->config->get("server"))).$this->config->get("server");
+		$payload .= Utils::writeShort(strlen($this->config->get("group"))).$this->config->get("group");
+		$bitFlags = 0;
+		$bitFlags |= $this->config->get("isDefaultServer") == true ? 0x00000001:0;
+		$bitFlags |= $this->config->get("isDefaultGroup") == true ? 0x00000002:0;
+		$payload .= Utils::writeInt($bitFlags);
+
+		$raw = $this->generateControlPacket(chr(0x01).$payload);
+		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
+	}
+	
+	public function sendNodePingPacket(){
+		$payload = "";
+		$raw = $this->generateControlPacket(chr(0x03).$payload);
+		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
+	}
+	
+	public function sendErrorPacket($error, $address, $port){
+		$raw = $this->generateControlPacket(chr(0x00).chr(strlen($error)).$error);
+		return $this->server->send(0xff, chr(0xff).$raw, true, $address, $port);
+	}
+	
+	public function controlPacketHandler(&$packet, $event){
+		if($event !== "server.unknownpacket" or (isset($packet["raw"]{0}) and ord($packet["raw"]{0}) !== 0xff)){
+			return;
+		}
+		$buffer = $this->RC4->decrypt(substr($packet["raw"], 1));
+		$md5sum = substr($buffer, 0, 16);
+		$offset = 0;
+		$payload = substr($buffer, 16);
+		if(strlen($payload) == 0 or md5($payload . $this->apiKey, true) != $md5sum){ //Packet validity check
+			return false;
+		}
+		$validUntil = Utils::readInt(substr($payload, $offset, 4));
+		$offset += 4;
+		if($validUntil < time()){ //Protect against packet replay
+			$error = "packet.expired";
+			$this->sendErrorPacket($error, $packet["ip"], $packet["port"]);
+			return true;
+		}
+
+		switch(ord($payload{$offset++})){
+			case 0x00: //Error
+				$len = ord($payload{$offset++});
+				console("[NOTICE] [RubberBand] Got \"".substr($payload, $offset, $len)."\" error from ".$packet->address.":".$packet->port);
+				$offset += $len;
+				break;
+			case 0x04: //Node Ping accepted
+				if($this->connected !== true){
+					break;
+				}
+			case 0x02: //Node Identify accepted			
+				if($this->connected !== true){
+					console("[INFO] [RubberBand] Connected correctly");
+				}
+				$this->connected = true;
+				$this->lastConnection = time();
+				break;
+			default: //No identified packet
+				$error = "packet.unknown";
+				$this->sendErrorPacket($error);
+				return true;
+
+		}
+		return true;
+	}
+	
 	public function init(){
+		$this->config = new Config($this->server->api->plugin->configPath($this)."config.yml", CONFIG_YAML, array(
+			"api-key" => "API_KEY",
+			"proxy-address" => "",
+			"proxy-port" => 19132,
+			"server" => "UNIQUE_IDENTIFIER",
+			"group" => "default",
+			"isDefaultServer" => true,
+			"isDefaultGroup" => false,
+		));
+		
+		if($this->config->get("api-key") === false or $this->config->get("api-key") == "API_KEY"){
+			console("[ERROR] [RubberBand] API key not set. RubberBand won't work without setting it on the config.yml");
+			return;
+		}
+		$this->apiKey = $this->config->get("api-key");
+
+		if($this->config->get("server") === false or $this->config->get("server") == "UNIQUE_IDENTIFIER"){
+			console("[ERROR] [RubberBand] Server not set. RubberBand won't work without setting it on the config.yml");
+			return;
+		}		
+		
+		if($this->config->get("proxy-address") === false or $this->config->get("proxy-address") == ""){
+			console("[ERROR] [RubberBand] Proxy address not set. RubberBand won't work without setting it on the config.yml");
+			return;
+		}
+		$this->address = $this->config->get("proxy-address");
+		$this->port = (int) $this->config->get("proxy-port");
+		
+		$this->RC4 = new RubberBandRC4(sha1($this->apiKey, true) ^ md5($this->apiKey, true));
+		$this->server->addHandler("server.unknownpacket", array($this, "controlPacketHandler"), 50);
+
+		console("[INFO] [RubberBand] Connecting with frontend proxy [/{$this->address}:{$this->port}]...");
+		$this->server->schedule(20 * 10, array($this, "scheduler"), array(), true);
+		$this->sendNodeIdentifyPacket();
+	}
+	
+	public function scheduler(){
+		if((time() - $this->lastConnection) > 30 and $this->connected === true){
+			$this->connected = false;
+			console("[WARNING] [RubberBand] Lost connection with frontend proxy. Reconnecting...");
+			$this->sendNodeIdentifyPacket();
+		}elseif($this->connected !== true){
+			$this->sendNodeIdentifyPacket();
+		}else{
+			$this->sendNodePingPacket();
+		}
 	}
 
 	public function __destruct(){
 	}
+}
+
+class RubberBandRC4{
+	private $S;
+
+	public function __construct($key, $drop = 768){
+		for($i = 0; $i < 256; ++$i){
+			$this->S[$i] = $i;
+		}
+		
+		$j = 0;
+		for($i = 0; $i < 256; ++$i){
+			$j = ($j + $this->S[$i] + ord($key{$i % strlen($key)})) & 0xFF;
+			$this->S[$i] ^= $this->S[$j];
+			$this->S[$j] ^= $this->S[$i];
+			$this->S[$i] ^= $this->S[$j];
+		}
+		
+		$i = $j = 0;
+		for($k = 0; $k < $drop; ++$k){
+			$i = ($i + 1) & 0xFF;
+			$j = ($j + $this->S[$i]) & 0xFF;
+			$this->S[$i] ^= $this->S[$j];
+			$this->S[$j] ^= $this->S[$i];
+			$this->S[$i] ^= $this->S[$j];
+		}
+	}
+	
+	public function encrypt($text, $IV = false){
+		$IV = $IV === false ? substr(md5(microtime().mt_rand(), true), mt_rand(0, 7), 8):substr($IV, 0, 8);
+		$text = $IV . $text;
+		$len = strlen($text);
+		$i = $j = 0;
+		$S = $this->S;
+		$text0 = "\x00";
+		for($k = 0; $k < $len; ++$k){
+			$i = ($i + 1) & 0xFF;
+			$j = ($j + $S[$i]) & 0xFF;
+			$S[$i] ^= $S[$j];
+			$S[$j] ^= $S[$i];
+			$S[$i] ^= $S[$j];
+			$K = chr($S[($S[$i] + $S[$j]) & 0xFF]) ^ $text0;
+			$text{$k} = $text{$k} ^ $K;
+			$text0 = $text{$k};
+		}
+		return $text;
+	}
+	
+	public function decrypt($text){
+		$len = strlen($text);
+		$i = $j = 0;
+		$S = $this->S;
+		$text0 = "\x00";
+		for($k = 0; $k < $len; ++$k){
+			$i = ($i + 1) & 0xFF;
+			$j = ($j + $S[$i]) & 0xFF;
+			$S[$i] ^= $S[$j];
+			$S[$j] ^= $S[$i];
+			$S[$i] ^= $S[$j];
+			$K = chr($S[($S[$i] + $S[$j]) & 0xFF]) ^ $text0;
+			$text0 = $text{$k};
+			$text{$k} = $text{$k} ^ $K;
+		}
+		return substr($text, 8);
+	}
+
 }
 
 class RubberBandAPI{

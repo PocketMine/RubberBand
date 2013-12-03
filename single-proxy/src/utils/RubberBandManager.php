@@ -55,14 +55,14 @@ class RubberBandManager extends Thread{
 		$validUntil = $validUntil === false ? time() + DEFAULT_CONTROL_PACKET_TIME:(int) $validUntil;
 		$payload = Utils::writeInt($validUntil) . $payload;
 		$md5sum = md5($payload . $this->apiKey, true);
-		$packet = new StackablePacket($this->RC4->encrypt($md5sum . $payload), false, false);
+		$packet = new StackablePacket(chr(0xff).$this->RC4->encrypt($md5sum . $payload), false, false);
 		$packet->dstaddress = $dstaddress;
 		$packet->dstport = $dstport;
+		$packet->len = strlen($packet->buffer);
 		return $packet;
 	}
 
-	public function handleControlPacket(StackablePacket $packet){
-		
+	public function handleControlPacket(StackablePacket $packet){		
 		$packet->buffer = $this->RC4->decrypt(substr($packet->buffer, 1));
 		$md5sum = substr($packet->buffer, 0, 16);
 		$offset = 0;
@@ -96,19 +96,22 @@ class RubberBandManager extends Thread{
 				
 				$len = Utils::readShort(substr($payload, $offset, 2));
 				$offset += 2;
-				$uniqueID = substr($payload, $offset, $len);
+				$server = substr($payload, $offset, $len);
 				$offset += $len;
 				
 				$len = Utils::readShort(substr($payload, $offset, 2));
 				$offset += 2;
-				$groupID = substr($payload, $offset, $len);
+				$group = substr($payload, $offset, $len);
 				$offset += $len;
 				
 				$bitFlags = Utils::readInt(substr($payload, $offset, 4));
 				$offset += 4;
 				
-				$defaultServer = ($bitFlags & 0b00000000000000000000000000000001) > 0;
-				$defaultGroup  = ($bitFlags & 0b00000000000000000000000000000010) > 0;
+				$defaultServer = ($bitFlags & 0x00000001) > 0;
+				$defaultGroup  = ($bitFlags & 0x00000002) > 0;
+				console("[INFO] Server \"{$server}\" on group \"{$group}\" (dS:".intval($defaultServer).",dG:".intval($defaultGroup).") has been identified");
+				
+				return $this->generateControlPacket(chr(0x02), $packet->address, $packet->port);
 				break;
 
 			default: //No identified packet
@@ -160,7 +163,9 @@ class RubberBandManager extends Thread{
 				break;
 				
 			case 0xff://RubberBand control packet
-				$this->handleControlPacket($packet);
+				if(($returnPacket = $this->handleControlPacket($packet)) instanceof StackablePacket){
+					$this->frontendThread->sendPacket($returnPacket);
+				}
 				break;
 			default: //No identified packets
 				return false;
