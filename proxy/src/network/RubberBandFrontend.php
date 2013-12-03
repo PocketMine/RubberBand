@@ -22,7 +22,7 @@
 
 class RubberBandFrontend extends Thread{
 	public $address, $port, $manager;
-	private $socket;
+	public $socket;
 	public $stop;
 	public function __construct($address, $port, RubberBandManager $manager){
 		$this->address = $address;
@@ -36,7 +36,7 @@ class RubberBandFrontend extends Thread{
 	}
 	
 	public function sendPacket(StackablePacket $packet){
-		return @socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
+		return @socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddress, $packet->dstport);
 	}
 
 	public function run(){
@@ -64,6 +64,7 @@ class RubberBandFrontend extends Thread{
 			if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
 				$this->manager->processFrontendPacket(new StackablePacket($buf, $source, $port, $len));
 			}
+			echo 1;
 		}
 		return 0;
 	}

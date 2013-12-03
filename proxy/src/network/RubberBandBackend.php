@@ -62,13 +62,13 @@ class RubberBandBackend extends Thread{
 		$action = 0;
 		while($this->stop == false){
 			$doAction = false;
-			foreach($this->sockets as $port => $socket){
+			foreach($this->sockets as $srcport => $socket){
 				$read = array($socket);
 				if(socket_select($read, $write, $except, 0, 0) > 0){
 					if(($len = @socket_recvfrom($socket, $buf, 9216, 0, $source, $port)) > 0){
 						$packet = new StackablePacket($buf, $source, $port, $len);
 						$packet->srcaddress = $this->address;
-						$packet->srcport = $this->port;
+						$packet->srcport = $srcport;
 						$this->manager->processBackendPacket($packet);
 						unset($packet);
 						$doAction = true;

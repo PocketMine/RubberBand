@@ -32,7 +32,7 @@ class RubberBandManager extends Thread{
 	public $backendThreadCount;
 	public $RC4;
 	public $identifiers;
-	public $frontendRoutes;
+	public $clientData;
 	public $backendRoutes;
 	public $nodeIndex;
 	public $backendPorts;
@@ -44,7 +44,6 @@ class RubberBandManager extends Thread{
 		$this->backendAddress = $backendAddress;
 		$this->apiKey = $apiKey;
 		$this->identifiers = new StackableArray();
-		$this->frontendRoutes = new StackableArray();
 		$this->backendRoutes = new StackableArray();
 		$this->backendThreadCount = $backendThreads;
 		$this->backendPorts = new StackableArray();
@@ -55,6 +54,7 @@ class RubberBandManager extends Thread{
 		$this->nodeIndex[2] = new StackableArray(); //Groups
 		$this->nodeIndex[3] = false; //Default server
 		$this->nodeIndex[4] = false; //Default group
+		$this->clientData = new StackableArray();
 		self::$instance = $this;
 	}
 	
@@ -148,6 +148,13 @@ class RubberBandManager extends Thread{
 			return $this->identifiers[$address.":".$port] = crc32(hash("sha1", $address.":".$port."|".$this->apiKey, true));
 		}
 		return $this->identifiers[$address.":".$port];
+	}	
+
+	public function getAdvancedIdentifier($address, $port, $port2){
+		if(!isset($this->identifiers[$address.":".$port.":".$port2])){
+			return $this->identifiers[$address.":".$port.":".$port2] = crc32(hash("sha1", $address.":".$port.":".$port2."|".$this->apiKey, true));
+		}
+		return $this->identifiers[$address.":".$port.":".$port2];
 	}
 	
 	public function generateControlPacket($payload, $dstaddress, $dstport, $validUntil = false){
@@ -291,8 +298,8 @@ class RubberBandManager extends Thread{
 		return $servers[mt_rand(0, count($servers) - 1)][0];
 	}
 	
-	public function generateRoute($identifier, $serverIdentifier = false){
-		if($serverIdentifier === false and ($serverIdentifier = $this->giveBackend($identifier)) === false){
+	public function generateRoute(StackablePacket $packet, $serverIdentifier = false){
+		if($serverIdentifier === false and ($serverIdentifier = $this->giveBackend($packet->identifier)) === false){
 			return false;
 		}
 
@@ -312,33 +319,49 @@ class RubberBandManager extends Thread{
 				return false;
 			}
 		}
-		$this->nodeIndex[0][$serverIdentifier][11][$assignedPort] = $identifier;
-		$this->nodeIndex[0][$serverIdentifier][12][$identifier] = $assignedPort;
-		$this->frontendRoutes[$identifier] = $this->nodeIndex[0][$serverIdentifier];
-		//$this->frontendRoutes[$identifier] = $this->nodeIndex[0][$serverIdentifier];
+		$this->nodeIndex[0][$serverIdentifier][11][$assignedPort] = $packet->identifier;
+		$this->nodeIndex[0][$serverIdentifier][12][$packet->identifier] = $assignedPort;
+		$sourceIdentifier = $this->getAdvancedIdentifier($this->nodeIndex[0][$serverIdentifier][1], $this->nodeIndex[0][$serverIdentifier][2], $assignedPort);
+		$this->clientData[$packet->identifier] = new StackableArray(
+			$packet->address, //0
+			$packet->port, //1
+			$this->nodeIndex[0][$serverIdentifier], //Frontend route (2)
+			$sourceIdentifier //3
+		);
+		var_dump("src:".$sourceIdentifier);
+		$this->backendRoutes[$sourceIdentifier] = $this->clientData[$packet->identifier];
 		return true;
 
 	}
 	
-	public function getFrontendToBackendRoute($identifier){
-		if(!isset($this->frontendRoutes[$identifier]) and $this->generateRoute($identifier) !== true){ //New route
+	public function getFrontendToBackendRoute(StackablePacket $packet){
+		if(!isset($this->clientData[$packet->identifier]) and $this->generateRoute($packet) !== true){ //New route
 			return false;
 		}
-		return $this->frontendRoutes[$identifier];
+		return $this->clientData[$packet->identifier][2];
+	}
+	
+	public function getBackendToFrontendRoute(StackablePacket $packet){
+		var_dump("gto:".$packet->srcidentifier);
+		if(!isset($this->backendRoutes[$packet->srcidentifier])){
+			return false;
+		}
+		return $this->clientData[$packet->srcidentifier];
 	}
 	
 	public function removeFrontendToBackendRoute($identifier){
-		if(isset($this->frontendRoutes[$identifier])){
+		if(isset($this->clientData[$identifier])){
 			//TODO: Send remove packet
-			$server = $this->frontendRoutes[$identifier];
+			$server = $this->clientData[$identifier][2];
 			unset($server[11][$server[12][$identifier]]);
 			unset($server[12][$identifier]);
+			$this->clientData[$identifier][2] = false;
 		}
 	}
 	
 	public function routePacket(StackablePacket $packet, $frontend = false){
 		if($frontend === true){
-			$route = $this->getFrontendToBackendRoute($packet->identifier);
+			$route = $this->getFrontendToBackendRoute($packet);
 			if($route === false){
 				return false;
 			}
@@ -347,18 +370,19 @@ class RubberBandManager extends Thread{
 			$srcport = $route[12][$packet->identifier];
 			return $this->backendPorts[$srcport]->sendPacket($srcport, $packet);
 		}else{
-			var_dump($packet);
-			return;
-			$route = $this->getBackendToFrontendRoute($packet->identifier, $packet->srcport);
+			$route = $this->getBackendToFrontendRoute($packet);
 			if($route === false){
 				return false;
 			}
+			$packet->dstaddress = $route[0];
+			$packet->dstport = $route[1];
+			$this->frontendThread->sendPacket($packet);
 		}
 	}
 	
 	public function processBackendPacket(StackablePacket $packet){
 		$packet->identifier = $this->getIdentifier($packet->address, $packet->port);
-		$packet->srcidentifier = $this->getIdentifier($packet->srcaddress, $packet->srcport);
+		$packet->srcidentifier = $this->getAdvancedIdentifier($packet->address, $packet->port, $packet->srcport);
 		switch(ord($packet->buffer{0})){			
 			//Raknet Packets
 			case 0x01:
