@@ -20,7 +20,8 @@
  *
 */
 
-define("RUBBERBAND_VERSION", "v1.0dev");
+define("RUBBERBAND_VERSION", "1.0dev");
+define("DEFAULT_CONTROL_PACKET_TIME", 10);
 define("DEBUG", 2);
 define("LOG", true);
 
@@ -70,9 +71,10 @@ if($errors > 0){
 require_once("src/utils/Spyc.php");
 require_once("src/utils/Config.php");
 require_once("src/utils/pthreads.php");
+require_once("src/utils/RC4.php");
 require_once("src/network/RubberBandFrontend.php");
-require_once("src/network/RubberBandWorkers.php");
-require_once("src/network/RAWReceivedPacket.php");
+require_once("src/network/RubberBandBackend.php");
+require_once("src/network/StackablePacket.php");
 require_once("src/utils/RubberBandManager.php");
 
 require_once("src/RubberBandProxy.php");
@@ -81,7 +83,7 @@ require_once("src/RubberBandProxy.php");
 $config = new Config("config.yml", CONFIG_YAML, array(
 	"frontend-address" => "0.0.0.0",
 	"frontend-port" => 19132,
-	"frontend-workers" => 2,
+	"backend-threads" => 8,
 	"api-key" => "YOUR_API_KEY",
 ));
 

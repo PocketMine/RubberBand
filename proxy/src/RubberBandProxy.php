@@ -21,7 +21,7 @@
 */
 
 class RubberBandProxy{
-	private $config, $address, $port, $apiKey, $threads = 1;
+	private $config, $address, $port, $apiKey, $backendThreads = 1;
 	private $manager;
 
 	public function __construct(Config $config){
@@ -32,10 +32,11 @@ class RubberBandProxy{
 			console("[ERROR] API key not set. RubberBand won't work without setting it on the config.yml");
 			return;
 		}
-		$this->threads = $this->config->get("frontend-workers");
-		if(!is_int($this->threads) or $this->threads < 1){
-			$this->config->set("frontend-workers", 1);
-			$this->threads = 1;
+		
+		$this->backendThreads = $this->config->get("backend-threads");
+		if(!is_int($this->backendThreads) or $this->backendThreads < 1){
+			$this->config->set("backend-threads", 1);
+			$this->backendThreads = 1;
 		}
 		
 		$this->address = $this->config->get("frontend-address");
@@ -51,17 +52,7 @@ class RubberBandProxy{
 		}
 		
 		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." on ".$this->address.":".$this->port);
-		$this->manager = new RubberBandManager($this->address, $this->port, $this->threads, $this->apiKey);
+		$this->manager = new RubberBandManager($this->address, $this->port, $this->backendThreads, $this->apiKey);
 		$this->manager->start();
-		$nextCollector = time() + 20;
-		while(!$this->manager->isTerminated()){
-			sleep(1);
-			if(time() >= $nextCollector){
-				$nextCollector = time() + 20;
-				if(($cycles = gc_collect_cycles()) > 0){
-					console("[DEBUG] Collected ".$cycles." cycles", true, true, 2);
-				}
-			}
-		}
 	}
 }

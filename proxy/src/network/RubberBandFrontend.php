@@ -21,14 +21,13 @@
 */
 
 class RubberBandFrontend extends Thread{
-	public $address, $port;
+	public $address, $port, $manager;
 	private $socket;
-	private $stop;
-	private $workers;
-	private $workerCount;
-	public function __construct($address, $port){
+	public $stop;
+	public function __construct($address, $port, RubberBandManager $manager){
 		$this->address = $address;
 		$this->port = $port;
+		$this->manager = $manager;
 		$this->start();
 	}
 	
@@ -36,9 +35,8 @@ class RubberBandFrontend extends Thread{
 		$this->stop = true;
 	}
 	
-	protected function addWorker(RubberBandReceiveWorker $worker){
-		$this->workers[$this->workerCount] = $worker;
-		++$this->workerCount;
+	public function sendPacket(StackablePacket $packet){
+		return @socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
 	}
 
 	public function run(){
@@ -62,15 +60,9 @@ class RubberBandFrontend extends Thread{
 		$source = null;
 		$port = null;
 		$count = 0;
-		$packets = array();
 		while($this->stop == false){
 			if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
-				$packet = new RAWReceivedPacket($buf, $source, $port);
-				$this->workers[$count]->processPacket($packet);
-				++$count;
-				if($count >= $this->workerCount){
-					$count = 0;
-				}
+				$this->manager->processFrontendPacket(new StackablePacket($buf, $source, $port, $len));
 			}
 		}
 		return 0;
