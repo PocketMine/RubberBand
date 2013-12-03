@@ -113,6 +113,19 @@ class RubberBandManager extends Thread{
 				
 				return $this->generateControlPacket(chr(0x02), $packet->address, $packet->port);
 				break;
+				
+			case 0x03: //Node Ping
+				$playerCount = Utils::readShort(substr($payload, $offset, 2));
+				$offset += 2;
+				
+				$maxPlayerCount = Utils::readShort(substr($payload, $offset, 2));
+				$offset += 2;
+				
+				$len = Utils::readShort(substr($payload, $offset, 2));
+				$players = gzinflate(substr($payload, $offset, $len));
+				$offset += $len;
+				return $this->generateControlPacket(chr(0x04), $packet->address, $packet->port);
+				break;
 
 			default: //No identified packet
 				$error = "packet.unknown";

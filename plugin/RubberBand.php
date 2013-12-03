@@ -65,6 +65,16 @@ class RubberBand implements Plugin{
 	
 	public function sendNodePingPacket(){
 		$payload = "";
+		$payload .= Utils::writeShort(count($this->server->clients));
+		$payload .= Utils::writeShort($this->server->maxClients);
+		$players = "";
+		foreach($this->server->clients as $player){
+			if($player->username != ""){
+				$str .= $player->username.",";
+			}
+		}
+		$players = gzdeflate($players, 9);
+		$payload .= Utils::writeShort(strlen($players)) . $players;
 		$raw = $this->generateControlPacket(chr(0x03).$payload);
 		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
 	}
