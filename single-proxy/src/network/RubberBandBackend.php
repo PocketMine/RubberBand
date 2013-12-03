@@ -21,12 +21,13 @@
 */
 
 class RubberBandBackend extends Thread{
-	public $sockets, $manager, $socketCount;
+	public $sockets, $manager, $socketCount, $id;
 	private $stop;
 	
-	public function __construct(RubberbandManager $manager){
+	public function __construct(RubberbandManager $manager, $id = 0){
 		$this->manager = $manager;
 		$this->socketCount = 0;
+		$this->id = $id;
 		$this->start();
 	}
 	
@@ -48,7 +49,7 @@ class RubberBandBackend extends Thread{
 	public function run(){
 		$this->stop = false;
 		$this->clients = new StackableArray();
-		console("[INFO] Started UDP backend");
+		console("[INFO] Started UDP backend #{$this->id}");
 		
 		$this->wait();
 		

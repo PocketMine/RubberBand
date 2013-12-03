@@ -27,16 +27,18 @@ class RubberBandManager extends Thread{
 	private $port;
 	private $apiKey;
 	private $frontendThread;
-	private $backendThread;
+	private $backendThreads;
+	private $backendThreadCount;
 	private $RC4;
 	public $identifiers;
 	public $router;
 	public $data = array();
 	
-	public function __construct($address, $port, $apiKey){		
+	public function __construct($address, $port, $backendThreads, $apiKey){		
 		$this->data = array($address, $port, $apiKey);
 		$this->identifiers = new StackableArray();
 		$this->router = new StackableArray();
+		$this->backendThreadCount = $backendThreads;
 		self::$instance = $this;
 	}
 	
@@ -207,18 +209,20 @@ class RubberBandManager extends Thread{
 			return 1;
 		}
 		
-		$this->backendThread = new RubberBandBackend($this);
-		while(!$this->backendThread->isRunning() and !$this->backendThread->isTerminated()){
-			usleep(1);
-		}
-		while(!$this->backendThread->isWaiting() and !$this->backendThread->isTerminated()){
-			usleep(1);
-		}		
-		if($this->backendThread->isTerminated()){
-			return 1;
-		}
+		$this->backendThreads = new StackableArray();
 		
-		$this->backendThread->notify();
+		for($k = 0; $k < $this->backendThreadCount; ++$k){
+			$this->backendThreads[$k] = new RubberBandBackend($this, $k);
+			while(!$this->backendThreads[$k]->isRunning() and !$this->backendThreads[$k]->isTerminated()){
+				usleep(1);
+			}
+			while(!$this->backendThreads[$k]->isWaiting() and !$this->backendThreads[$k]->isTerminated()){
+				usleep(1);
+			}
+			
+			$this->backendThreads[$k]->notify();
+		}
+
 		$this->frontendThread->notify();
 
 		while($this->stop == false){
@@ -233,14 +237,16 @@ class RubberBandManager extends Thread{
 				}	
 				$this->frontendThread->notify();
 			}
-			if($this->backendThread->isTerminated()){
-				console("[WARNING] Backend Thread crashed, restarting...");
-				$this->backendThread = new RubberBandBackend($this);
-				while(!$this->backendThread->isRunning() and !$this->backendThread->isTerminated()){
-					usleep(1);
-				}
-				while(!$this->backendThread->isWaiting() and !$this->backendThread->isTerminated()){
-					usleep(1);
+			for($k = 0; $k < $this->backendThreadCount; ++$k){
+				if($this->backendThreads[$k]->isTerminated()){
+					console("[WARNING] Backend Thread #$k crashed, restarting...");
+					$this->backendThreads[$k] = new RubberBandBackend($this, $k);
+					while(!$this->backendThreads[$k]->isRunning() and !$this->backendThreads[$k]->isTerminated()){
+						usleep(1);
+					}
+					while(!$this->backendThreads[$k]->isWaiting() and !$this->backendThreads[$k]->isTerminated()){
+						usleep(1);
+					}
 				}
 			}
 			usleep(10000);

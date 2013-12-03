@@ -21,7 +21,7 @@
 */
 
 class RubberBandProxy{
-	private $config, $address, $port, $apiKey, $threads = 1;
+	private $config, $address, $port, $apiKey, $backendThreads = 1;
 	private $manager;
 
 	public function __construct(Config $config){
@@ -31,6 +31,12 @@ class RubberBandProxy{
 		if($this->apiKey == false or $this->apiKey == "YOUR_API_KEY"){
 			console("[ERROR] API key not set. RubberBand won't work without setting it on the config.yml");
 			return;
+		}
+		
+		$this->backendThreads = $this->config->get("backend-threads");
+		if(!is_int($this->backendThreads) or $this->backendThreads < 1){
+			$this->config->set("backend-threads", 1);
+			$this->backendThreads = 1;
 		}
 		
 		$this->address = $this->config->get("frontend-address");
@@ -46,7 +52,7 @@ class RubberBandProxy{
 		}
 		
 		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." on ".$this->address.":".$this->port);
-		$this->manager = new RubberBandManager($this->address, $this->port, $this->apiKey);
+		$this->manager = new RubberBandManager($this->address, $this->port, $this->backendThreads, $this->apiKey);
 		$this->manager->start();
 	}
 }
