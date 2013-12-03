@@ -36,7 +36,10 @@ class RubberBandFrontend extends Thread{
 	}
 	
 	public function sendPacket(StackablePacket $packet){
-		return @socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddress, $packet->dstport);
+		if(socket_select($read = null, $write = array($this->socket), $except = null, null) > 0){
+			return @socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddress, $packet->dstport);
+		}
+		return false;
 	}
 
 	public function run(){
@@ -55,16 +58,19 @@ class RubberBandFrontend extends Thread{
 		}
 
 		$this->wait(); //Get ready for the action
-
+		
+		$write = null;
+		$except = null;
 		$buf = null;
 		$source = null;
 		$port = null;
 		$count = 0;
 		while($this->stop == false){
-			if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
-				$this->manager->processFrontendPacket(new StackablePacket($buf, $source, $port, $len));
+			if(socket_select($read = array($this->socket), $write, $except, null) > 0){
+				if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
+					$this->manager->processFrontendPacket(new StackablePacket($buf, $source, $port, $len));
+				}
 			}
-			echo 1;
 		}
 		return 0;
 	}

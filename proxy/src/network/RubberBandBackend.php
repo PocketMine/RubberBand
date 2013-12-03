@@ -37,6 +37,9 @@ class RubberBandBackend extends Thread{
 			$port = null;
 			$address = null;
 			socket_getsockname($socket, $address, $port);
+			socket_set_option($socket, SOL_SOCKET, SO_SNDBUF, 65535);
+			socket_set_option($socket, SOL_SOCKET, SO_RCVBUF, 65535);
+			socket_set_nonblock($socket);
 			$this->sockets[$port] = $socket;
 			return $port;
 		}
@@ -44,7 +47,9 @@ class RubberBandBackend extends Thread{
 	}
 	
 	public function sendPacket($srcport, StackablePacket $packet){
-		return @socket_sendto($this->sockets[$srcport], $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
+		if(socket_select($read = null, $write = array($this->sockets[$srcport]), $except = null, null) > 0){
+			return @socket_sendto($this->sockets[$srcport], $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
+		}
 	}
 	
 	public function stop(){
@@ -63,8 +68,7 @@ class RubberBandBackend extends Thread{
 		while($this->stop == false){
 			$doAction = false;
 			foreach($this->sockets as $srcport => $socket){
-				$read = array($socket);
-				if(socket_select($read, $write, $except, 0, 0) > 0){
+				if(socket_select($read = array($socket), $write, $except, 0, 0) > 0){
 					if(($len = @socket_recvfrom($socket, $buf, 9216, 0, $source, $port)) > 0){
 						$packet = new StackablePacket($buf, $source, $port, $len);
 						$packet->srcaddress = $this->address;
@@ -77,8 +81,10 @@ class RubberBandBackend extends Thread{
 			}
 
 			if($doAction == false){
-				++$action;
-				usleep(min(100000, $action * $action * 10));
+				if($action < 50){
+					++$action;				
+				}
+				usleep(min(200000, $action * $action * 10));
 			}else{
 				$action = 0;
 			}
