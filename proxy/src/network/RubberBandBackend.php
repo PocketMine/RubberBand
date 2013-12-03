@@ -21,25 +21,30 @@
 */
 
 class RubberBandBackend extends Thread{
-	public $sockets, $manager, $socketCount, $id;
+	public $sockets, $manager, $id;
 	public $stop;
+	public $address;
 	
-	public function __construct(RubberbandManager $manager, $id = 0){
+	public function __construct(RubberbandManager $manager, $address, $id = 0){
 		$this->manager = $manager;
-		$this->socketCount = 0;
+		$this->address = $address;
 		$this->id = $id;
 		$this->start();
 	}
 	
 	public function addSocket(){
-		if(($this->sockets[++$this->socketCount] = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP)) !== false){
-			return $this->socketCount;
+		if(($socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP)) !== false and socket_bind($socket, $this->address) !== false){
+			$port = null;
+			$address = null;
+			socket_getsockname($socket, $address, $port);
+			$this->sockets[$port] = $socket;
+			return $port;
 		}
 		return false;
 	}
 	
-	public function sendPacket($socketID, StackablePacket $packet){
-		return @socket_sendto($this->sockets[$socketID], $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
+	public function sendPacket($srcport, StackablePacket $packet){
+		return @socket_sendto($this->sockets[$srcport], $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
 	}
 	
 	public function stop(){
@@ -48,19 +53,35 @@ class RubberBandBackend extends Thread{
 	
 	public function run(){
 		$this->stop = false;
-		$this->clients = new StackableArray();
+		$this->sockets = new StackableArray();
 		console("[INFO] Started UDP backend #{$this->id}");
 		
 		$this->wait();
-		
+		$write = null;
+		$except = null;
+		$action = 0;
 		while($this->stop == false){
-			/*$read = clone $this->sockets;
-			$write = null;
-			$except = null;
-			if(socket_select($read, $write, $except, null) > 0){
-				var_dump($read);
-			}*/
-			usleep(1);
+			$doAction = false;
+			foreach($this->sockets as $port => $socket){
+				$read = array($socket);
+				if(socket_select($read, $write, $except, 0, 0) > 0){
+					if(($len = @socket_recvfrom($socket, $buf, 9216, 0, $source, $port)) > 0){
+						$packet = new StackablePacket($buf, $source, $port, $len);
+						$packet->srcaddress = $this->address;
+						$packet->srcport = $this->port;
+						$this->manager->processBackendPacket($packet);
+						unset($packet);
+						$doAction = true;
+					}
+				}
+			}
+
+			if($doAction == false){
+				++$action;
+				usleep(min(100000, $action * $action * 10));
+			}else{
+				$action = 0;
+			}
 		}
 	}
 }

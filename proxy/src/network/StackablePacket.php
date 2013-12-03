@@ -21,7 +21,7 @@
 */
 
 class StackablePacket extends Stackable{
-	public $address, $port, $buffer, $len, $identifier, $dstaddress, $dstport;
+	public $address, $port, $buffer, $len, $identifier, $dstaddress, $dstport, $srcidentifier, $srcaddress, $srcport;
 	
 	public function __construct($buffer, $address, $port, $len){
 		$this->address = $address;

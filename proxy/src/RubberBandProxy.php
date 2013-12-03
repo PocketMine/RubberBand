@@ -21,7 +21,7 @@
 */
 
 class RubberBandProxy{
-	private $config, $address, $port, $apiKey, $backendThreads = 1;
+	private $config, $address, $backendAddress, $port, $apiKey, $backendThreads = 1;
 	private $manager;
 
 	public function __construct(Config $config){
@@ -50,9 +50,15 @@ class RubberBandProxy{
 			console("[ERROR] Frontend Port not set. Set it on the config.yml");
 			return;
 		}
+
+		$this->backendAddress = $this->config->get("backend-address");
+		if($this->backendAddress === false){
+			console("[ERROR] Backend Address not set. Set it on the config.yml");
+			return;
+		}
 		
 		console("[INFO] Starting RubberBand Proxy ".RUBBERBAND_VERSION." on ".$this->address.":".$this->port);
-		$this->manager = new RubberBandManager($this->address, $this->port, $this->backendThreads, $this->apiKey);
+		$this->manager = new RubberBandManager($this->address, $this->port, $this->backendAddress, $this->backendThreads, $this->apiKey);
 		$this->manager->start();
 	}
 }

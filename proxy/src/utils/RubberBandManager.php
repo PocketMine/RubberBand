@@ -25,25 +25,36 @@ class RubberBandManager extends Thread{
 	public $stop;
 	public $address;
 	public $port;
+	public $backendAddress;
 	public $apiKey;
 	public $frontendThread;
 	public $backendThreads;
 	public $backendThreadCount;
 	public $RC4;
 	public $identifiers;
-	public $router;
+	public $frontendRoutes;
+	public $backendRoutes;
 	public $nodeIndex;
-	public $data = array();
+	public $backendPorts;
+	public $portRotation;
 	
-	public function __construct($address, $port, $backendThreads, $apiKey){		
-		$this->data = array($address, $port, $apiKey);
+	public function __construct($address, $port, $backendAddress, $backendThreads, $apiKey){		
+		$this->address = $address;
+		$this->port = $port;
+		$this->backendAddress = $backendAddress;
+		$this->apiKey = $apiKey;
 		$this->identifiers = new StackableArray();
-		$this->router = new StackableArray();
+		$this->frontendRoutes = new StackableArray();
+		$this->backendRoutes = new StackableArray();
 		$this->backendThreadCount = $backendThreads;
+		$this->backendPorts = new StackableArray();
+		$this->portRotation = 0;
 		$this->nodeIndex = new StackableArray();
 		$this->nodeIndex[0] = new StackableArray(); //RAW Servers		
 		$this->nodeIndex[1] = new StackableArray(); //Server names
 		$this->nodeIndex[2] = new StackableArray(); //Groups
+		$this->nodeIndex[3] = false; //Default server
+		$this->nodeIndex[4] = false; //Default group
 		self::$instance = $this;
 	}
 	
@@ -57,6 +68,14 @@ class RubberBandManager extends Thread{
 			return false;
 		}
 		
+		if($this->nodeIndex[3] !== false and $defaultServer === true){ //Same defaultServer
+			return false;
+		}
+		
+		if($this->nodeIndex[4] !== false and $defaultGroup === true and $this->nodeIndex[4] !== $group){ //Same defaultGroup
+			return false;
+		}
+		
 		$this->nodeIndex[0][$identifier] = new StackableArray(
 			$identifier,  //0
 			$address,  //1
@@ -66,15 +85,24 @@ class RubberBandManager extends Thread{
 			$group,  //5
 			$onlinePlayers,  //6
 			$maxPlayerCount,  //7
-			"",  //8
+			"",  //Players (8)
 			$defaultServer,  //9
-			$defaultGroup  //10
+			$defaultGroup,  //10
+			new StackableArray(), //Ports (11)
+			new StackableArray() //Clients (12)
 		);
 		$this->nodeIndex[1][$server] = $this->nodeIndex[0][$identifier];
 		if(!isset($this->nodeIndex[2][$group])){
 			$this->nodeIndex[2][$group] = new StackableArray();
 		}
 		$this->nodeIndex[2][$group][$identifier] = $this->nodeIndex[0][$identifier];
+		
+		if($defaultServer === true){
+			$this->nodeIndex[3] = $this->nodeIndex[0][$identifier];
+		}		
+		if($defaultGroup === true){
+			$this->nodeIndex[4] = $group;
+		}
 		return true;
 	}
 	
@@ -95,16 +123,23 @@ class RubberBandManager extends Thread{
 		if(!isset($this->nodeIndex[0][$identifier])){
 			return false;
 		}
-		$data =& $this->nodeIndex[0][$identifier];
+		$data = $this->nodeIndex[0][$identifier];
 		
-		//TODO: handle player redirection
+		//TODO: handle player redirection on remove
 		
 		unset($this->nodeIndex[1][$data[4]]);
 		unset($this->nodeIndex[2][$data[5]][$identifier]);
 		if(count($this->nodeIndex[2][$data[5]]) == 0){
 			unset($this->nodeIndex[2][$data[5]]);
+			if($data[5] === $this->nodeIndex[4]){ //Remove defaultGroup
+				$this->nodeIndex[4] = false;
+			}
 		}
 		unset($this->nodeIndex[0][$identifier]);
+		if($data === $this->nodeIndex[3]){ //Remove defaultServer
+			$this->nodeIndex[3] = false;
+		}
+		unset($data);
 		return true;
 	}
 	
@@ -113,10 +148,6 @@ class RubberBandManager extends Thread{
 			return $this->identifiers[$address.":".$port] = crc32(hash("sha1", $address.":".$port."|".$this->apiKey, true));
 		}
 		return $this->identifiers[$address.":".$port];
-	}
-	
-	public function routePacket(StackablePacket $packet, $frontend = false){
-		console("[DUMMY] Routing packet");
 	}
 	
 	public function generateControlPacket($payload, $dstaddress, $dstport, $validUntil = false){
@@ -162,13 +193,11 @@ class RubberBandManager extends Thread{
 					return $this->generateControlPacket(chr(0x00).chr(strlen($error)).$error, $packet->address, $packet->port);
 				}
 				
-				$len = Utils::readShort(substr($payload, $offset, 2));
-				$offset += 2;
+				$len = ord($payload{$offset++});
 				$server = substr($payload, $offset, $len);
 				$offset += $len;
 				
-				$len = Utils::readShort(substr($payload, $offset, 2));
-				$offset += 2;
+				$len = ord($payload{$offset++});
 				$group = substr($payload, $offset, $len);
 				$offset += $len;
 				
@@ -224,6 +253,150 @@ class RubberBandManager extends Thread{
 		}
 	}
 	
+	public function giveBackend($identifier){
+		if($this->nodeIndex[4] !== false){ //Default group
+			return $this->selectFromGroup($this->nodeIndex[4]);
+		}elseif($this->nodeIndex[3] !== false){ //Default server
+			return $this->nodeIndex[3][0];
+		}else{
+			return false;
+		}
+	}
+	
+	public function selectServer($server){
+		if(!isset($this->nodeIndex[1][$server])){
+			return false;
+		}
+		return $this->nodeIndex[1][$server];
+	}
+	
+	public function selectServerByIdentifier($identifier){
+		if(!isset($this->nodeIndex[0][$identifier])){
+			return false;
+		}
+		return $this->nodeIndex[0][$identifier];
+	}
+	
+	public function selectFromGroup($group){
+		if(!isset($this->nodeIndex[2][$group])){
+			return false;
+		}
+		$servers = array();
+		foreach($this->nodeIndex[2][$group] as $identifier => $server){
+			if($server[6] < $server[7]){
+				return $server[0];
+			}
+			$servers[] = $server;
+		}
+		return $servers[mt_rand(0, count($servers) - 1)][0];
+	}
+	
+	public function generateRoute($identifier, $serverIdentifier = false){
+		if($serverIdentifier === false and ($serverIdentifier = $this->giveBackend($identifier)) === false){
+			return false;
+		}
+
+		$assignedPort = false;
+		foreach($this->backendPorts as $port => $backend){
+			if(!isset($this->nodeIndex[0][$serverIdentifier][11][$port])){
+				$assignedPort = $port;
+				break;
+			}
+		}
+		if($assignedPort === false){
+			$this->portRotation = ++$this->portRotation % $this->backendThreadCount;
+			$assignedPort = $this->backendThreads[$this->portRotation]->addSocket();
+			if($assignedPort !== false){
+				$this->backendPorts[$assignedPort] = $this->backendThreads[$this->portRotation];
+			}else{
+				return false;
+			}
+		}
+		$this->nodeIndex[0][$serverIdentifier][11][$assignedPort] = $identifier;
+		$this->nodeIndex[0][$serverIdentifier][12][$identifier] = $assignedPort;
+		$this->frontendRoutes[$identifier] = $this->nodeIndex[0][$serverIdentifier];
+		//$this->frontendRoutes[$identifier] = $this->nodeIndex[0][$serverIdentifier];
+		return true;
+
+	}
+	
+	public function getFrontendToBackendRoute($identifier){
+		if(!isset($this->frontendRoutes[$identifier]) and $this->generateRoute($identifier) !== true){ //New route
+			return false;
+		}
+		return $this->frontendRoutes[$identifier];
+	}
+	
+	public function removeFrontendToBackendRoute($identifier){
+		if(isset($this->frontendRoutes[$identifier])){
+			//TODO: Send remove packet
+			$server = $this->frontendRoutes[$identifier];
+			unset($server[11][$server[12][$identifier]]);
+			unset($server[12][$identifier]);
+		}
+	}
+	
+	public function routePacket(StackablePacket $packet, $frontend = false){
+		if($frontend === true){
+			$route = $this->getFrontendToBackendRoute($packet->identifier);
+			if($route === false){
+				return false;
+			}
+			$packet->dstaddress = $route[1];
+			$packet->dstport = $route[2];
+			$srcport = $route[12][$packet->identifier];
+			return $this->backendPorts[$srcport]->sendPacket($srcport, $packet);
+		}else{
+			var_dump($packet);
+			return;
+			$route = $this->getBackendToFrontendRoute($packet->identifier, $packet->srcport);
+			if($route === false){
+				return false;
+			}
+		}
+	}
+	
+	public function processBackendPacket(StackablePacket $packet){
+		$packet->identifier = $this->getIdentifier($packet->address, $packet->port);
+		$packet->srcidentifier = $this->getIdentifier($packet->srcaddress, $packet->srcport);
+		switch(ord($packet->buffer{0})){			
+			//Raknet Packets
+			case 0x01:
+			case 0x02:
+			case 0x05:
+			case 0x06:
+			case 0x07:
+			case 0x08:
+			case 0x1a:
+			case 0x1c:
+			case 0x1d:
+			case 0x80:
+			case 0x81:
+			case 0x82:
+			case 0x83:
+			case 0x84:
+			case 0x85:
+			case 0x86:
+			case 0x87:
+			case 0x88:
+			case 0x89:
+			case 0x8a:
+			case 0x8b:
+			case 0x8c:
+			case 0x8d:
+			case 0x8e:
+			case 0x8f:
+			case 0x99:
+			case 0xa0:
+			case 0xc0:
+				$this->routePacket($packet, false);
+				break;
+			default: //No identified packets
+				return false;
+		}
+		return true;
+	}
+	
 	public function processFrontendPacket(StackablePacket $packet){
 		$packet->identifier = $this->getIdentifier($packet->address, $packet->port);
 		switch(ord($packet->buffer{0})){			
@@ -259,7 +432,7 @@ class RubberBandManager extends Thread{
 				$this->routePacket($packet, true);
 				break;
 			case 0xfe:
-				if($packet->buffer{1} == "\xfd"){ //Query
+				if(isset($packet->buffer{1}) and $packet->buffer{1} == "\xfd"){ //Query
 					//$this->handleQueryRequest();
 					break;
 				}
@@ -269,6 +442,7 @@ class RubberBandManager extends Thread{
 				if(($returnPacket = $this->handleControlPacket($packet)) instanceof StackablePacket){
 					$this->frontendThread->sendPacket($returnPacket);
 				}
+				unset($returnPacket);
 				break;
 			default: //No identified packets
 				return false;
@@ -277,11 +451,7 @@ class RubberBandManager extends Thread{
 	}
 
 	public function run(){
-		$this->stop = false;
-		$this->address = $this->data[0];
-		$this->port = $this->data[1];
-		$this->apiKey = $this->data[2];
-		
+		$this->stop = false;		
 		
 		$this->RC4 = new RubberBandRC4(sha1($this->apiKey, true) ^ md5($this->apiKey, true));
 
@@ -300,7 +470,7 @@ class RubberBandManager extends Thread{
 		$this->backendThreads = new StackableArray();
 		
 		for($k = 0; $k < $this->backendThreadCount; ++$k){
-			$this->backendThreads[$k] = new RubberBandBackend($this, $k);
+			$this->backendThreads[$k] = new RubberBandBackend($this, $this->backendAddress, $k);
 			while(!$this->backendThreads[$k]->isRunning() and !$this->backendThreads[$k]->isTerminated()){
 				usleep(1);
 			}
@@ -325,18 +495,27 @@ class RubberBandManager extends Thread{
 				}	
 				$this->frontendThread->notify();
 			}
+
 			for($k = 0; $k < $this->backendThreadCount; ++$k){
 				if($this->backendThreads[$k]->isTerminated()){
 					console("[WARNING] Backend Thread #$k crashed, restarting...");
-					$this->backendThreads[$k] = new RubberBandBackend($this, $k);
+					$sockets = $this->backendThreads[$k]->sockets;
+					$this->backendThreads[$k] = new RubberBandBackend($this, $this->backendAddress, $k);
 					while(!$this->backendThreads[$k]->isRunning() and !$this->backendThreads[$k]->isTerminated()){
 						usleep(1);
 					}
 					while(!$this->backendThreads[$k]->isWaiting() and !$this->backendThreads[$k]->isTerminated()){
 						usleep(1);
 					}
+					$this->backendThreads[$k]->sockets = $sockets;
+					foreach($sockets as $port => $socket){
+						$this->backendPorts[$port] = $this->backendThreads[$k];
+					}
+					unset($sockets);
+					$this->backendThreads[$k]->notify();
 				}
 			}
+	
 			foreach($this->nodeIndex[0] as $identifier => $data){
 				if($data[3] < time()){
 					$this->removeNode($data[1], $data[2]);

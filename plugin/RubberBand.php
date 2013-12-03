@@ -52,8 +52,8 @@ class RubberBand implements Plugin{
 	public function sendNodeIdentifyPacket(){
 		$payload = "";
 		$payload .= chr(strlen(self::VERSION)).self::VERSION;
-		$payload .= Utils::writeShort(strlen($this->config->get("server"))).$this->config->get("server");
-		$payload .= Utils::writeShort(strlen($this->config->get("group"))).$this->config->get("group");
+		$payload .= chr(strlen($this->config->get("server"))).$this->config->get("server");
+		$payload .= chr(strlen($this->config->get("group"))).$this->config->get("group");
 		$payload .= Utils::writeShort(count($this->server->clients));
 		$payload .= Utils::writeShort($this->server->maxClients);
 		$bitFlags = 0;
@@ -111,11 +111,13 @@ class RubberBand implements Plugin{
 		}
 
 		switch(ord($payload{$offset++})){
+
 			case 0x00: //Error
 				$len = ord($payload{$offset++});
 				console("[NOTICE] [RubberBand] Got \"".substr($payload, $offset, $len)."\" error from ".$packet["ip"].":".$packet["port"]);
 				$offset += $len;
 				break;
+
 			case 0x04: //Node Ping accepted
 				if($this->connected !== true){
 					break;
@@ -127,8 +129,63 @@ class RubberBand implements Plugin{
 				$this->connected = true;
 				$this->lastConnection = time();
 				break;
+
 			case 0x06: //Node Remove accepted:
 				break;
+
+			case 0x08: //Player Change Target request			
+				$transactionID = Utils::readInt(substr($payload, $offset, 4));
+				$offset += 4;
+				
+				$len = ord($payload{$offset++});
+				$originServer = substr($payload, $offset, $len);
+
+				$len = ord($payload{$offset++});
+				$originGroup = substr($payload, $offset, $len);
+				$offset += $len;
+				
+				$len = ord($payload{$offset++});
+				$realAddress = substr($payload, $offset, $len);
+				$offset += $len;
+
+				$len = ord($payload{$offset++});
+				$realAddress = substr($payload, $offset, $len);
+				$offset += $len;
+				$realPort = Utils::readShort(substr($payload, $offset, 2));
+				$offset += 2;
+				
+				$clientID = Utils::readLong(substr($payload, $offset, 8));
+				$offset += 8;
+
+				$MTU = Utils::readShort(substr($payload, $offset, 2));
+				$offset += 2;
+				
+				$counter0 = Utils::readTriad(substr($payload, $offset, 3));
+				$offset += 3;
+
+				$counter3 = Utils::readTriad(substr($payload, $offset, 3));
+				$offset += 3;
+
+				$len = ord($payload{$offset++});
+				$username = substr($payload, $offset, $len);
+
+				$gamemode = ord($payload{$offset++});
+				
+				
+				$len = ord($payload{$offset++});
+				$spawnWorld = substr($payload, $offset, $len);
+				$offset += $len;
+				
+				$spawnX = Utils::readFloat(substr($payload, $offset, 4));
+				$offset += 4;
+
+				$spawnY = Utils::readFloat(substr($payload, $offset, 4));
+				$offset += 4;
+
+				$spawnZ = Utils::readFloat(substr($payload, $offset, 4));
+				$offset += 4;
+				break;
+
 			default: //No identified packet
 				$error = "packet.unknown";
 				$this->sendErrorPacket($error);

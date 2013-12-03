@@ -45,3 +45,7 @@ You can also issue messages to be broadcasted to all servers, teleport players u
 
 
 __Expected release date: 10th of December 2013__
+
+
+
+* __RubberBand__ uses the [pthreads extension for PHP](https://github.com/krakjoe/pthreads) by _[krakjoe](https://github.com/krakjoe)_

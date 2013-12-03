@@ -83,6 +83,7 @@ require_once("src/RubberBandProxy.php");
 $config = new Config("config.yml", CONFIG_YAML, array(
 	"frontend-address" => "0.0.0.0",
 	"frontend-port" => 19132,
+	"backend-address" => "0.0.0.0",
 	"backend-threads" => 8,
 	"api-key" => "YOUR_API_KEY",
 ));
