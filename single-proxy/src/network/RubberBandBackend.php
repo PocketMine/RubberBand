@@ -22,7 +22,7 @@
 
 class RubberBandBackend extends Thread{
 	public $sockets, $manager, $socketCount, $id;
-	private $stop;
+	public $stop;
 	
 	public function __construct(RubberbandManager $manager, $id = 0){
 		$this->manager = $manager;

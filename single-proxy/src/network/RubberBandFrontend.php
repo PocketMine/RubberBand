@@ -23,7 +23,7 @@
 class RubberBandFrontend extends Thread{
 	public $address, $port, $manager;
 	private $socket;
-	private $stop;
+	public $stop;
 	public function __construct($address, $port, RubberBandManager $manager){
 		$this->address = $address;
 		$this->port = $port;

@@ -54,6 +54,8 @@ class RubberBand implements Plugin{
 		$payload .= chr(strlen(self::VERSION)).self::VERSION;
 		$payload .= Utils::writeShort(strlen($this->config->get("server"))).$this->config->get("server");
 		$payload .= Utils::writeShort(strlen($this->config->get("group"))).$this->config->get("group");
+		$payload .= Utils::writeShort(count($this->server->clients));
+		$payload .= Utils::writeShort($this->server->maxClients);
 		$bitFlags = 0;
 		$bitFlags |= $this->config->get("isDefaultServer") == true ? 0x00000001:0;
 		$bitFlags |= $this->config->get("isDefaultGroup") == true ? 0x00000002:0;
@@ -78,7 +80,12 @@ class RubberBand implements Plugin{
 		$raw = $this->generateControlPacket(chr(0x03).$payload);
 		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
 	}
-	
+
+	public function sendNodeRemovePacket(){
+		$raw = $this->generateControlPacket(chr(0x05));
+		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
+	}
+		
 	public function sendErrorPacket($error, $address, $port){
 		$raw = $this->generateControlPacket(chr(0x00).chr(strlen($error)).$error);
 		return $this->server->send(0xff, chr(0xff).$raw, true, $address, $port);
@@ -106,7 +113,7 @@ class RubberBand implements Plugin{
 		switch(ord($payload{$offset++})){
 			case 0x00: //Error
 				$len = ord($payload{$offset++});
-				console("[NOTICE] [RubberBand] Got \"".substr($payload, $offset, $len)."\" error from ".$packet->address.":".$packet->port);
+				console("[NOTICE] [RubberBand] Got \"".substr($payload, $offset, $len)."\" error from ".$packet["ip"].":".$packet["port"]);
 				$offset += $len;
 				break;
 			case 0x04: //Node Ping accepted
@@ -119,6 +126,8 @@ class RubberBand implements Plugin{
 				}
 				$this->connected = true;
 				$this->lastConnection = time();
+				break;
+			case 0x06: //Node Remove accepted:
 				break;
 			default: //No identified packet
 				$error = "packet.unknown";
@@ -160,10 +169,16 @@ class RubberBand implements Plugin{
 		
 		$this->RC4 = new RubberBandRC4(sha1($this->apiKey, true) ^ md5($this->apiKey, true));
 		$this->server->addHandler("server.unknownpacket", array($this, "controlPacketHandler"), 50);
+		$this->server->addHandler("server.close", array($this, "onServerStop"), 10);
 
 		console("[INFO] [RubberBand] Connecting with frontend proxy [/{$this->address}:{$this->port}]...");
 		$this->server->schedule(20 * 10, array($this, "scheduler"), array(), true);
 		$this->sendNodeIdentifyPacket();
+	}
+	
+	public function onServerStop(){
+		$this->sendNodeRemovePacket();
+		$this->connected = false;
 	}
 	
 	public function scheduler(){
@@ -179,6 +194,7 @@ class RubberBand implements Plugin{
 	}
 
 	public function __destruct(){
+		$this->sendNodeRemovePacket();
 	}
 }
 
