@@ -328,7 +328,6 @@ class RubberBandManager extends Thread{
 			$this->nodeIndex[0][$serverIdentifier], //Frontend route (2)
 			$sourceIdentifier //3
 		);
-		var_dump("src:".$sourceIdentifier);
 		$this->backendRoutes[$sourceIdentifier] = $this->clientData[$packet->identifier];
 		return true;
 
@@ -342,7 +341,6 @@ class RubberBandManager extends Thread{
 	}
 	
 	public function getBackendToFrontendRoute(StackablePacket $packet){
-		var_dump("gto:".$packet->srcidentifier);
 		if(!isset($this->backendRoutes[$packet->srcidentifier])){
 			return false;
 		}
@@ -516,7 +514,7 @@ class RubberBandManager extends Thread{
 				}		
 				while(!$this->frontendThread->isWaiting() and !$this->frontendThread->isTerminated()){
 					usleep(1);
-				}	
+				}
 				$this->frontendThread->notify();
 			}
 

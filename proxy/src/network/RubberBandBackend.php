@@ -47,9 +47,7 @@ class RubberBandBackend extends Thread{
 	}
 	
 	public function sendPacket($srcport, StackablePacket $packet){
-		if(socket_select($read = null, $write = array($this->sockets[$srcport]), $except = null, null) > 0){
-			return @socket_sendto($this->sockets[$srcport], $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
-		}
+		return @socket_sendto($this->sockets[$srcport], $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
 	}
 	
 	public function stop(){
