@@ -161,7 +161,8 @@ class RubberBandManager extends Thread{
 		$validUntil = $validUntil === false ? time() + DEFAULT_CONTROL_PACKET_TIME:(int) $validUntil;
 		$payload = Utils::writeInt($validUntil) . $payload;
 		$md5sum = md5($payload . $this->apiKey, true);
-		$packet = new StackablePacket(chr(0xff).$this->RC4->encrypt($md5sum . $payload), false, false);
+		$payload = chr(0xff).$this->RC4->encrypt($md5sum . $payload);
+		$packet = new StackablePacket($payload, false, false, strlen($payload));
 		$packet->dstaddress = $dstaddress;
 		$packet->dstport = $dstport;
 		$packet->len = strlen($packet->buffer);
