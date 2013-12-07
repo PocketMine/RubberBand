@@ -72,7 +72,7 @@ class RubberBand implements Plugin{
 		$players = "";
 		foreach($this->server->clients as $player){
 			if($player->username != ""){
-				$str .= $player->username.",";
+				$players .= $player->username.",";
 			}
 		}
 		$players = gzdeflate($players, 9);
