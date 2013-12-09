@@ -24,10 +24,14 @@ class RubberBandFrontend extends Thread{
 	public $address, $port, $manager;
 	public $socket;
 	public $stop;
+	public $queue;
+	public $hasPackets;
 	public function __construct($address, $port, RubberBandManager $manager){
 		$this->address = $address;
 		$this->port = $port;
 		$this->manager = $manager;
+		$this->queue = new StackableArray();
+		$this->hasPackets = false;
 		$this->start();
 	}
 	
@@ -36,8 +40,8 @@ class RubberBandFrontend extends Thread{
 	}
 	
 	public function sendPacket(StackablePacket $packet){
-		var_dump($this->socket);
-		return @socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddress, $packet->dstport);
+		$this->queue[] = $packet;
+		return true;
 	}
 
 	public function run(){
@@ -49,7 +53,7 @@ class RubberBandFrontend extends Thread{
 			socket_set_option($this->socket, SOL_SOCKET, SO_REUSEADDR, 0);
 			socket_set_option($this->socket, SOL_SOCKET, SO_SNDBUF, 65535);
 			socket_set_option($this->socket, SOL_SOCKET, SO_RCVBUF, 65535);
-			socket_set_block($this->socket);
+			socket_set_nonblock($this->socket);
 			console("[INFO] Started UDP frontend on {$this->address}:{$this->port}");
 		}else{
 			console("[ERROR] Couldn't start UDP socket on {$this->address}:{$this->port}");
@@ -61,9 +65,32 @@ class RubberBandFrontend extends Thread{
 		$source = null;
 		$port = null;
 		$count = 0;
+		$action = 0;
 		while($this->stop == false){
+			$doAction = false;
 			if(($len = @socket_recvfrom($this->socket, $buf, 9216, 0, $source, $port)) > 0){
 				$this->manager->processFrontendPacket(new StackablePacket($buf, $source, $port, $len));
+				$doAction = true;
+			}			
+			if($this->hasPackets == true){
+				foreach($this->queue as $i => $packet){
+					unset($this->queue[$i]);
+					@socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
+					unset($packet);
+				}
+				if(count($this->queue) == 0){
+					$this->hasPackets = false;
+				}
+				$doAction = true;
+			}
+
+			if($doAction == false){
+				if($action < 50){
+					++$action;				
+				}
+				usleep(min(200000, $action * $action * 10));
+			}else{
+				$action = 0;
 			}
 		}
 		return 0;

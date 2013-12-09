@@ -24,10 +24,14 @@ class RubberBandBackend extends Thread{
 	public $sockets, $manager, $id;
 	public $stop;
 	public $address;
+	public $queue;
+	public $hasPackets;
 	
 	public function __construct(RubberbandManager $manager, $address, $id = 0){
 		$this->manager = $manager;
 		$this->address = $address;
+		$this->queue = new StackableArray();
+		$this->hasPackets = new StackableArray();
 		$this->id = $id;
 		$this->start();
 	}
@@ -41,13 +45,20 @@ class RubberBandBackend extends Thread{
 			socket_set_option($socket, SOL_SOCKET, SO_RCVBUF, 65535);
 			socket_set_nonblock($socket);
 			$this->sockets[$port] = $socket;
+			$this->queue[$port] = new StackableArray();
+			$this->hasPackets[$port] = false;
 			return $port;
 		}
 		return false;
 	}
 	
 	public function sendPacket($srcport, StackablePacket $packet){
-		return @socket_sendto($this->sockets[$srcport], $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
+		if(!isset($this->sockets[$srcport])){
+			return false;
+		}
+		$this->hasPackets[$srcport] = true;
+		$this->queue[$srcport][] = $packet;
+		return true;
 	}
 	
 	public function stop(){
@@ -66,15 +77,24 @@ class RubberBandBackend extends Thread{
 		while($this->stop == false){
 			$doAction = false;
 			foreach($this->sockets as $srcport => $socket){
-				if(socket_select($read = array($socket), $write, $except, 0, 0) > 0){
-					if(($len = @socket_recvfrom($socket, $buf, 9216, 0, $source, $port)) > 0){
-						$packet = new StackablePacket($buf, $source, $port, $len);
-						$packet->srcaddress = $this->address;
-						$packet->srcport = $srcport;
-						$this->manager->processBackendPacket($packet);
+				if(($len = @socket_recvfrom($socket, $buf, 9216, 0, $source, $port)) > 0){
+					$packet = new StackablePacket($buf, $source, $port, $len);
+					$packet->srcaddress = $this->address;
+					$packet->srcport = $srcport;
+					$this->manager->processBackendPacket($packet);
+					unset($packet);
+					$doAction = true;
+				}
+				if($this->hasPackets[$srcport] == true){
+					foreach($this->queue[$srcport] as $i => $packet){
+						unset($this->queue[$srcport][$i]);
+						@socket_sendto($socket, $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
 						unset($packet);
-						$doAction = true;
 					}
+					if(count($this->queue[$srcport]) == 0){
+						$this->hasPackets[$srcport] = false;
+					}
+					$doAction = true;
 				}
 			}
 
