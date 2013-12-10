@@ -41,6 +41,7 @@ class RubberBandFrontend extends Thread{
 	
 	public function sendPacket(StackablePacket $packet){
 		$this->queue[] = $packet;
+		$this->hasPackets = true;
 		return true;
 	}
 
