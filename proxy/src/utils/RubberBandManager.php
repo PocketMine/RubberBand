@@ -328,6 +328,7 @@ class RubberBandManager extends Thread{
 			$packet->address, //0
 			$packet->port, //1
 			$this->nodeIndex[0][$serverIdentifier], //Frontend route (2)
+			$packet->identifier, //4
 			$sourceIdentifier //3
 		);
 		$this->backendRoutes[$sourceIdentifier] = $this->clientData[$packet->identifier];
@@ -346,7 +347,7 @@ class RubberBandManager extends Thread{
 		if(!isset($this->backendRoutes[$packet->srcidentifier])){
 			return false;
 		}
-		return $this->clientData[$packet->srcidentifier];
+		return $this->backendRoutes[$packet->srcidentifier];
 	}
 	
 	public function removeFrontendToBackendRoute($identifier){

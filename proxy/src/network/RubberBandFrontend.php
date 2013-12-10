@@ -76,7 +76,7 @@ class RubberBandFrontend extends Thread{
 			if($this->hasPackets == true){
 				foreach($this->queue as $i => $packet){
 					unset($this->queue[$i]);
-					@socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddres, $packet->dstport);
+					@socket_sendto($this->socket, $packet->buffer, $packet->len, 0, $packet->dstaddress, $packet->dstport);
 					unset($packet);
 				}
 				if(count($this->queue) == 0){
