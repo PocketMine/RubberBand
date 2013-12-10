@@ -58,7 +58,7 @@ class RubberBandManager extends Thread{
 		self::$instance = $this;
 	}
 	
-	public function addNode($address, $port, $server, $group, $onlinePlayers, $maxPlayerCount, $defaultServer, $defaultGroup){
+	public function addNode($address, $port, $server, $group, $onlinePlayers, $maxPlayerCount, $protocol, $defaultServer, $defaultGroup){
 		$identifier = $this->getIdentifier($address, $port);
 		if(isset($this->nodeIndex[0][$identifier])){
 			return false;
@@ -89,7 +89,8 @@ class RubberBandManager extends Thread{
 			$defaultServer,  //9
 			$defaultGroup,  //10
 			new StackableArray(), //Ports (11)
-			new StackableArray() //Clients (12)
+			new StackableArray(), //Clients (12)
+			$protocol //13
 		);
 		$this->nodeIndex[1][$server] = $this->nodeIndex[0][$identifier];
 		if(!isset($this->nodeIndex[2][$group])){
@@ -215,12 +216,15 @@ class RubberBandManager extends Thread{
 				$maxPlayerCount = Utils::readShort(substr($payload, $offset, 2));
 				$offset += 2;
 				
+				$protocol = Utils::readShort(substr($payload, $offset, 2));
+				$offset += 2;
+				
 				$bitFlags = Utils::readInt(substr($payload, $offset, 4));
 				$offset += 4;
 				
 				$defaultServer = ($bitFlags & 0x00000001) > 0;
 				$defaultGroup  = ($bitFlags & 0x00000002) > 0;
-				if($this->addNode($packet->address, $packet->port, $server, $group, $playerCount, $maxPlayerCount, $defaultServer, $defaultGroup) !== false){
+				if($this->addNode($packet->address, $packet->port, $server, $group, $playerCount, $maxPlayerCount, $protocol, $defaultServer, $defaultGroup) !== false){
 					console("[INFO] Node [/{$packet->address}:{$packet->port}] \"{$server}\" on group \"{$group}\" (dS:".intval($defaultServer).",dG:".intval($defaultGroup).") has been identified");
 					return $this->generateControlPacket(chr(0x02), $packet->address, $packet->port);
 				}else{

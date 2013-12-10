@@ -56,6 +56,7 @@ class RubberBand implements Plugin{
 		$payload .= chr(strlen($this->config->get("group"))).$this->config->get("group");
 		$payload .= Utils::writeShort(count($this->server->clients));
 		$payload .= Utils::writeShort($this->server->maxClients);
+		$payload .= Utils::writeShort(CURRENT_PROTOCOL);
 		$bitFlags = 0;
 		$bitFlags |= $this->config->get("isDefaultServer") == true ? 0x00000001:0;
 		$bitFlags |= $this->config->get("isDefaultGroup") == true ? 0x00000002:0;
