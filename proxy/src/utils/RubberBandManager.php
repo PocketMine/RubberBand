@@ -98,7 +98,7 @@ class RubberBandManager extends Thread{
 		$this->nodeIndex[2][$group][$identifier] = $this->nodeIndex[0][$identifier];
 		
 		if($defaultServer === true){
-			$this->nodeIndex[3] = $this->nodeIndex[0][$identifier];
+			$this->nodeIndex[3] = $identifier;
 		}		
 		if($defaultGroup === true){
 			$this->nodeIndex[4] = $group;
@@ -136,7 +136,7 @@ class RubberBandManager extends Thread{
 			}
 		}
 		unset($this->nodeIndex[0][$identifier]);
-		if($data === $this->nodeIndex[3]){ //Remove defaultServer
+		if($identifier === $this->nodeIndex[3]){ //Remove defaultServer
 			$this->nodeIndex[3] = false;
 		}
 		unset($data);
@@ -236,6 +236,7 @@ class RubberBandManager extends Thread{
 				$offset += 2;
 				
 				$len = Utils::readShort(substr($payload, $offset, 2));
+				$offset += 2;
 				$players = gzinflate(substr($payload, $offset, $len));
 				$offset += $len;
 				if($this->updateNode($packet->address, $packet->port, $playerCount, $maxPlayerCount, $players) !== false){
@@ -265,7 +266,7 @@ class RubberBandManager extends Thread{
 		if($this->nodeIndex[4] !== false){ //Default group
 			return $this->selectFromGroup($this->nodeIndex[4]);
 		}elseif($this->nodeIndex[3] !== false){ //Default server
-			return $this->nodeIndex[3][0];
+			return $this->nodeIndex[3];
 		}else{
 			return false;
 		}
