@@ -44,7 +44,7 @@ The proxy configuration is given by the servers itself, so you can create new se
 You can also issue messages to be broadcasted to all servers, teleport players using commands, get info about other servers... And RubberBand comes with an API for plugins so you can extend its functionality.
 
 
-__Expected release date: 10th of December 2013__
+__Expected working release date: 10th of December 2013__
 
 
 
