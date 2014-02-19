@@ -3,11 +3,11 @@
 /*
 __PocketMine Plugin__
 name=RubberBand
-description=A collection of tools so development for PocketMine-MP is easier
+description=Plugin used to communicate with the RubberBand frontend
 version=1.0dev
-author=shoghicp
+author=PocketMine Team
 class=RubberBand
-apiversion=10,11
+apiversion=12
 */
 
 
@@ -36,17 +36,67 @@ class RubberBand implements Plugin{
 	const VERSION = "1.0dev";
 	const DEFAULT_CONTROL_PACKET_TIME = 10;
 
-	private $server, $RC4, $apiKey, $address, $port, $lastConnection = 0, $connected = false;
+	private $server;
+	private $RC4;
+	private $apiKey;
+	private $address;
+	private $port;
+	private $lastConnection = 0;
+	private $connected = false;
+	private $clients = array();
+
 	public function __construct(ServerAPI $api, $server = false){
 		$this->server = ServerAPI::request();
 		RubberBandAPI::setInstance($this);
+	}
+
+	public function init(){
+		$this->config = new Config($this->server->api->plugin->configPath($this)."config.yml", CONFIG_YAML, array(
+			"api-key" => "API_KEY",
+			"proxy-address" => "",
+			"proxy-port" => 19132,
+			"server" => "UNIQUE_IDENTIFIER",
+			"group" => "default",
+			"isDefaultServer" => true,
+			"isDefaultGroup" => false,
+		));
+		
+		if($this->config->get("api-key") === false or $this->config->get("api-key") == "API_KEY"){
+			console("[ERROR] [RubberBand] API key not set. RubberBand won't work without setting it on the config.yml");
+			return;
+		}
+		$this->apiKey = $this->config->get("api-key");
+
+		if($this->config->get("server") === false or $this->config->get("server") == "UNIQUE_IDENTIFIER"){
+			console("[ERROR] [RubberBand] Server not set. RubberBand won't work without setting it on the config.yml");
+			return;
+		}		
+		
+		if($this->config->get("proxy-address") === false or $this->config->get("proxy-address") == ""){
+			console("[ERROR] [RubberBand] Proxy address not set. RubberBand won't work without setting it on the config.yml");
+			return;
+		}
+		$this->address = $this->config->get("proxy-address");
+		$this->port = (int) $this->config->get("proxy-port");
+		
+		$this->RC4 = new RubberBandRC4(sha1($this->apiKey, true) ^ md5($this->apiKey, true));
+
+		PacketSendEvent::register(array($this, "sendPacketProxy"), EventPriority::HIGHEST);
+		PacketReceiveEvent::register(array($this, "controlPacketHandler"), EventPriority::HIGHEST);
+		$this->server->addHandler("server.close", array($this, "onServerStop"), 10);
+
+		console("[INFO] [RubberBand] Connecting with frontend proxy [/{$this->address}:{$this->port}]...");
+		$this->server->schedule(20 * 10, array($this, "scheduler"), array(), true);
+		$this->sendNodeIdentifyPacket();
 	}
 	
 	public function generateControlPacket($payload, $validUntil = false){
 		$validUntil = $validUntil === false ? time() + self::DEFAULT_CONTROL_PACKET_TIME:(int) $validUntil;
 		$payload = Utils::writeInt($validUntil) . $payload;
 		$md5sum = md5($payload . $this->apiKey, true);
-		return $this->RC4->encrypt($md5sum . $payload);
+		$pk = new Packet;
+		$pk->buffer = "\xff" . $this->RC4->encrypt($md5sum . $payload);
+		return $pk;
 	}
 	
 	public function sendNodeIdentifyPacket(){
@@ -62,8 +112,10 @@ class RubberBand implements Plugin{
 		$bitFlags |= $this->config->get("isDefaultGroup") == true ? 0x00000002:0;
 		$payload .= Utils::writeInt($bitFlags);
 
-		$raw = $this->generateControlPacket(chr(0x01).$payload);
-		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
+		$pk = $this->generateControlPacket(chr(0x01).$payload);
+		$pk->ip = $this->address;
+		$pk->port = $this->port;
+		return $this->server->send($pk);
 	}
 	
 	public function sendNodePingPacket(){
@@ -78,25 +130,33 @@ class RubberBand implements Plugin{
 		}
 		$players = gzdeflate($players, 9);
 		$payload .= Utils::writeShort(strlen($players)) . $players;
-		$raw = $this->generateControlPacket(chr(0x03).$payload);
-		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
+		
+		$pk = $this->generateControlPacket(chr(0x03).$payload);
+		$pk->ip = $this->address;
+		$pk->port = $this->port;
+		return $this->server->send($pk);
 	}
 
 	public function sendNodeRemovePacket(){
-		$raw = $this->generateControlPacket(chr(0x05));
-		return $this->server->send(0xff, chr(0xff).$raw, true, $this->address, $this->port);
+		$pk = $this->generateControlPacket(chr(0x05));
+		$pk->ip = $this->address;
+		$pk->port = $this->port;
+		return $this->server->send($pk);
 	}
 		
 	public function sendErrorPacket($error, $address, $port){
-		$raw = $this->generateControlPacket(chr(0x00).chr(strlen($error)).$error);
-		return $this->server->send(0xff, chr(0xff).$raw, true, $address, $port);
+		$pk = $this->generateControlPacket(chr(0x00).chr(strlen($error)).$error);
+		$pk->ip = $address;
+		$pk->port = $port;
+		return $this->server->send($pk);
 	}
 	
-	public function controlPacketHandler(&$packet, $event){
-		if($event !== "server.unknownpacket" or (isset($packet["raw"]{0}) and ord($packet["raw"]{0}) !== 0xff)){
+	public function controlPacketHandler(PacketReceiveEvent $event){
+		$packet = $event->getPacket();
+		if($packet->buffer{0} !== "\xff")){
 			return;
 		}
-		$buffer = $this->RC4->decrypt(substr($packet["raw"], 1));
+		$buffer = $this->RC4->decrypt(substr($packet->buffer, 1));
 		$md5sum = substr($buffer, 0, 16);
 		$offset = 0;
 		$payload = substr($buffer, 16);
@@ -107,7 +167,7 @@ class RubberBand implements Plugin{
 		$offset += 4;
 		if($validUntil < time()){ //Protect against packet replay
 			$error = "packet.expired";
-			$this->sendErrorPacket($error, $packet["ip"], $packet["port"]);
+			$this->sendErrorPacket($error, $packet->ip, $packet->port);
 			return true;
 		}
 
@@ -115,7 +175,7 @@ class RubberBand implements Plugin{
 
 			case 0x00: //Error
 				$len = ord($payload{$offset++});
-				console("[NOTICE] [RubberBand] Got \"".substr($payload, $offset, $len)."\" error from ".$packet["ip"].":".$packet["port"]);
+				console("[NOTICE] [RubberBand] Got \"".substr($payload, $offset, $len)."\" error from ".$packet->ip.":".$packet->port);
 				$offset += $len;
 				break;
 
@@ -189,49 +249,11 @@ class RubberBand implements Plugin{
 
 			default: //No identified packet
 				$error = "packet.unknown";
-				$this->sendErrorPacket($error);
+				$this->sendErrorPacket($error, $packet->ip, $packet->port);
 				return true;
 
 		}
 		return true;
-	}
-	
-	public function init(){
-		$this->config = new Config($this->server->api->plugin->configPath($this)."config.yml", CONFIG_YAML, array(
-			"api-key" => "API_KEY",
-			"proxy-address" => "",
-			"proxy-port" => 19132,
-			"server" => "UNIQUE_IDENTIFIER",
-			"group" => "default",
-			"isDefaultServer" => true,
-			"isDefaultGroup" => false,
-		));
-		
-		if($this->config->get("api-key") === false or $this->config->get("api-key") == "API_KEY"){
-			console("[ERROR] [RubberBand] API key not set. RubberBand won't work without setting it on the config.yml");
-			return;
-		}
-		$this->apiKey = $this->config->get("api-key");
-
-		if($this->config->get("server") === false or $this->config->get("server") == "UNIQUE_IDENTIFIER"){
-			console("[ERROR] [RubberBand] Server not set. RubberBand won't work without setting it on the config.yml");
-			return;
-		}		
-		
-		if($this->config->get("proxy-address") === false or $this->config->get("proxy-address") == ""){
-			console("[ERROR] [RubberBand] Proxy address not set. RubberBand won't work without setting it on the config.yml");
-			return;
-		}
-		$this->address = $this->config->get("proxy-address");
-		$this->port = (int) $this->config->get("proxy-port");
-		
-		$this->RC4 = new RubberBandRC4(sha1($this->apiKey, true) ^ md5($this->apiKey, true));
-		$this->server->addHandler("server.unknownpacket", array($this, "controlPacketHandler"), 50);
-		$this->server->addHandler("server.close", array($this, "onServerStop"), 10);
-
-		console("[INFO] [RubberBand] Connecting with frontend proxy [/{$this->address}:{$this->port}]...");
-		$this->server->schedule(20 * 10, array($this, "scheduler"), array(), true);
-		$this->sendNodeIdentifyPacket();
 	}
 	
 	public function onServerStop(){
@@ -319,6 +341,10 @@ class RubberBandRC4{
 		}
 		return substr($text, 8);
 	}
+
+}
+
+class RubberBandThread{
 
 }
 
