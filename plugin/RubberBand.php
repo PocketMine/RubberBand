@@ -153,7 +153,7 @@ class RubberBand implements Plugin{
 	
 	public function controlPacketHandler(PacketReceiveEvent $event){
 		$packet = $event->getPacket();
-		if($packet->buffer{0} !== "\xff")){
+		if($packet->buffer{0} !== "\xff"){
 			return;
 		}
 		$buffer = $this->RC4->decrypt(substr($packet->buffer, 1));
